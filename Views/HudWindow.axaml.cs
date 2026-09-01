@@ -38,6 +38,43 @@ public partial class HudWindow : Window
         ResetToInitial();
     }
 
+    /// <summary>
+    /// 简化版：拔电时只弹"电量圆胶囊"——无电标先出、无工业模式矩形、无波纹。
+    /// 全圆胶囊直接带电量内容弹出 → 停留 → 整体缩小收回。
+    /// </summary>
+    public async Task ShowSimpleAsync(BatterySnapshot? battery)
+    {
+        ApplyBattery(battery, acOnline: false);
+        PositionTopCenter();
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        ResetToInitial();
+        SetSimpleCState();
+
+        if (!IsVisible)
+            Show();
+
+        try
+        {
+            await Task.WhenAll(
+                HudAnimations.SimplePillAppear().RunAsync(Pill, ct),
+                HudAnimations.SimpleFadeIn().RunAsync(BoltIcon, ct),
+                HudAnimations.SimpleFadeIn().RunAsync(NumHost, ct),
+                HudAnimations.SimpleScaleOut().RunAsync(ScaleHost, ct));
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (!ct.IsCancellationRequested && IsVisible)
+            Hide();
+    }
+
     /// <summary>填入电量数据并播放一次完整动画。</summary>
     public async Task ShowAndPlayAsync(BatterySnapshot? battery, bool acOnline)
     {
@@ -222,12 +259,12 @@ public partial class HudWindow : Window
         Pill.Opacity = 1;
         Pill.RenderTransform = new ScaleTransform(1d, 1d);
 
-        RippleHost.RenderTransform = new TranslateTransform(-259d, 0d);
+        RippleHost.RenderTransform = new TranslateTransform(-245d, 0d);
 
-        // 电标：贴胶囊左侧（pill 560, left=320, 方块 18 半宽 9 → icon center = 320+12+9 = 341, TX=-259）
+        // 电标：贴胶囊左侧（pill 560, left=320, 方块 18 半宽 9 → icon center = 320+26+9 = 355, TX=-245）
         BoltIcon.RenderTransform = new TransformGroup
         {
-            Children = { new ScaleTransform(1d, 1d), new TranslateTransform(-259d, 0d) },
+            Children = { new ScaleTransform(1d, 1d), new TranslateTransform(-245d, 0d) },
         };
         BoltIcon.Opacity = 1;
         CircleForm.Opacity = 0;
@@ -239,12 +276,50 @@ public partial class HudWindow : Window
         NumHost.Opacity = 1;
     }
 
+    /// <summary>
+    /// 简化版专用：在 ResetToInitial 之后，把所有可视元素拨到"状态 C（电量圆胶囊）"静态。
+    /// Pill 全圆胶囊 560×60、电标方块贴左（TX=-245）、数字内容待淡入。
+    /// </summary>
+    private void SetSimpleCState()
+    {
+        // 胶囊：全圆角（状态 C 圆胶囊），待 SimplePillAppear 弹出
+        Pill.Width = 560;
+        Pill.Height = 60;
+        Pill.CornerRadius = new CornerRadius(30d);
+        Pill.Opacity = 0;
+        Pill.RenderTransform = new ScaleTransform(0.6d, 0.6d);
+
+        // 电标：方块形态直接贴 pill 左内 26（TX=-245）
+        BoltIcon.RenderTransform = new TransformGroup
+        {
+            Children = { new ScaleTransform(1d, 1d), new TranslateTransform(-245d, 0d) },
+        };
+        BoltIcon.Opacity = 0;
+        CircleForm.Opacity = 0;
+        SquareForm.Opacity = 1;
+
+        // 标题 / 波纹全程隐藏
+        TitleHost.Opacity = 0;
+        RippleInnerHost.RenderTransform = new TranslateTransform(0d, 16d);
+        RippleMidHost.RenderTransform = new TranslateTransform(0d, 16d);
+        RippleOuterHost.RenderTransform = new TranslateTransform(0d, 16d);
+        RippleInner.Opacity = 0;
+        RippleMid.Opacity = 0;
+        RippleOuter.Opacity = 0;
+
+        // 数字待淡入
+        NumHost.RenderTransform = new TranslateTransform(0d, 0d);
+        NumHost.Opacity = 0;
+    }
+
     // ---------------- 定位 ----------------
 
-    /// <summary>把窗口贴到当前屏幕的顶部居中。</summary>
+    /// <summary>把窗口贴到主显示器顶部居中。强制主屏，避免窗口上次被拖到副屏后弹错位置。</summary>
     private void PositionTopCenter()
     {
-        var screen = Screens.ScreenFromVisual(this) ?? Screens.Primary;
+        // 主屏优先：Screens.ScreenFromVisual 会返回"当前窗口所在屏"，
+        // 若窗口历史位置在副屏，HUD 就会弹到副屏上方 → 强制用 Screens.Primary。
+        var screen = Screens.Primary ?? Screens.ScreenFromVisual(this);
         if (screen is null)
             return;
 

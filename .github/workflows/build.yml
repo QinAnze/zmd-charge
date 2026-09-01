@@ -1,0 +1,107 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main ]
+    # 推送 v* 标签时额外发布 GitHub Release
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 打标签时创建 Release 需要
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore
+      run: dotnet restore
+
+    - name: Build (Release)
+      run: dotnet build -c Release --no-restore /p:TreatWarningsAsErrors=true
+
+    - name: Publish single-file
+      run: dotnet publish -c Release -o publish --no-build
+
+    # ---- 版本号：tag 用 tag 名，否则用 0.0.<run_number> ----
+    - name: Resolve version
+      id: ver
+      shell: pwsh
+      run: |
+        if ($env:GITHUB_REF -like 'refs/tags/v*') {
+          $v = $env:GITHUB_REF -replace 'refs/tags/v', ''
+        } else {
+          $v = "0.0.$env:GITHUB_RUN_NUMBER"
+        }
+        "version=$v" >> $env:GITHUB_OUTPUT
+        Write-Host "Version: $v"
+
+    - name: Stamp version into Inno Setup script
+      shell: pwsh
+      run: |
+        $v = "${{ steps.ver.outputs.version }}"
+        $p = "installer\EndfieldCharge.iss"
+        (Get-Content $p) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$v`"" |
+          Set-Content $p -Encoding UTF8
+        Write-Host (Select-String -Path $p -Pattern 'MyAppVersion ')
+
+    - name: Create portable zip
+      shell: pwsh
+      run: |
+        $v = "${{ steps.ver.outputs.version }}"
+        if (!(Test-Path "publish\EndfieldCharge.exe")) {
+          Write-Error "publish\EndfieldCharge.exe not found"
+          exit 1
+        }
+        # 必须包含 SkiaSharp native dll（libSkiaSharp / libHarfBuzzSharp / av_libglesv2），
+        # 只打 exe 会导致启动即崩
+        $stage = "EndfieldCharge-$v-portable"
+        New-Item -ItemType Directory -Path $stage | Out-Null
+        Copy-Item "publish\*" -Destination $stage -Exclude "*.pdb"
+        Compress-Archive -Path "$stage\*" -DestinationPath "$stage.zip"
+        Remove-Item $stage -Recurse
+
+    # Inno Setup 在 windows-latest 通常预装，缺失时用 choco 兜底
+    - name: Ensure Inno Setup
+      shell: pwsh
+      run: |
+        if (!(Get-Command iscc -ErrorAction SilentlyContinue)) {
+          Write-Host "Inno Setup not found, installing via choco..."
+          choco install innosetup -y --no-progress
+        }
+        iscc /? | Select-Object -First 1
+
+    - name: Build installer
+      shell: pwsh
+      run: iscc "installer\EndfieldCharge.iss"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: EndfieldCharge-${{ steps.ver.outputs.version }}
+        path: |
+          installer\Output\*.exe
+          EndfieldCharge-*-portable.zip
+        if-no-files-found: error
+
+    # 只有推送 v* 标签才发 Release（标签由维护者手动创建）
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        name: EndfieldCharge ${{ steps.ver.outputs.version }}
+        generate_release_notes: true
+        files: |
+          installer\Output\*.exe
+          EndfieldCharge-*-portable.zip

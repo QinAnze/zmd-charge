@@ -1,0 +1,73 @@
+# ============================================================
+# EndfieldCharge — .gitignore (.NET 8 / Avalonia 11 / Windows)
+# ============================================================
+
+# ---------- 构建产物 ----------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+dist/
+x64/
+x86/
+build/
+
+# ---------- MSBuild / NuGet ----------
+*.binlog
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+*.nuget.props
+*.nuget.targets
+
+# ---------- IDE / 编辑器 ----------
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+*.swp
+*~
+
+# ---------- 测试 / 覆盖率 ----------
+[Tt]est[Rr]esult*/
+coverage/
+*.coverage
+*.coveragexml
+
+# ---------- Windows 系统文件 ----------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ---------- 安装包 / 安装器输出 ----------
+installer/Output/
+installer/*.exe
+installer/*.zip
+publish/
+EndfieldCharge-*-portable/
+EndfieldCharge-*-portable.zip
+EndfieldCharge-*-setup.exe
+*.msi
+*.iss.bak
+ISCC*.log
+setup_*.exe
+
+# ---------- 日志 / 临时 ----------
+*.log
+*.tmp
+*.temp
+*.cache
+*.swp
+.DS_Store

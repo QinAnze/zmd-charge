@@ -37,10 +37,13 @@ public partial class App : Application
             StartPowerWatching();
 
             // 调试/自查入口：不用真的插拔电源也能看动画
-            //   --preview  用本机真实电池数据播放一次
-            //   --demo     用示例数据播放一次（台式机 / 读不到电池时用）
+            //   --preview         用本机真实电池数据播放一次（完整版：插电）
+            //   --demo            用示例数据播放一次（台式机 / 读不到电池时用）
+            //   --preview-unplug  用示例数据播放一次（简化版：拔电只弹电量胶囊）
             if (HasCommandLineArg("--demo"))
                 _ = PreviewWithSampleDataAsync();
+            else if (HasCommandLineArg("--preview-unplug"))
+                _ = PreviewSimpleAsync();
             else if (HasCommandLineArg("--preview"))
                 _ = TriggerHudAsync();
         }
@@ -75,6 +78,22 @@ public partial class App : Application
         await _hud.ShowAndPlayAsync(sample, acOnline: true);
     }
 
+    /// <summary>用示例数据播放一次简化版（拔电只弹电量圆胶囊）。</summary>
+    private async Task PreviewSimpleAsync()
+    {
+        if (_hud is null)
+            return;
+
+        var sample = new Services.BatterySnapshot(
+            RemainingWh: 62.4,
+            FullWh: 90.0,
+            Percent: 69,
+            AcOnline: false,
+            Charging: false);
+
+        await _hud.ShowSimpleAsync(sample);
+    }
+
     // ---------------- 电源监听 ----------------
 
     private void StartPowerWatching()
@@ -84,13 +103,31 @@ public partial class App : Application
         // 事件在后台线程触发，切回 UI 线程再操作窗口
         _watcher.PowerSourceChanged += (_, acOnline) =>
         {
-            if (!acOnline)
-                return; // 拔电不弹，只关心插上充电器
-
-            Dispatcher.UIThread.Post(() => _ = TriggerHudAsync());
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (acOnline)
+                    _ = TriggerHudAsync();       // 插电：完整三态动画
+                else
+                    _ = TriggerSimpleHudAsync(); // 拔电：只弹电量圆胶囊
+            });
         };
 
         _watcher.Start();
+    }
+
+    private async Task TriggerSimpleHudAsync()
+    {
+        if (_hud is null)
+            return;
+
+        // 电池读取可能走 WMI 兜底，放在线程池里避免卡 UI
+        var (snapshot, _) = await Task.Run(() =>
+        {
+            PowerNative.TryGetAcOnline(out bool ac);
+            return (BatteryService.GetSnapshot(), ac);
+        });
+
+        await _hud.ShowSimpleAsync(snapshot);
     }
 
     private async Task TriggerHudAsync()
@@ -117,6 +154,23 @@ public partial class App : Application
         var previewItem = new NativeMenuItem("预览电量 HUD");
         previewItem.Click += (_, _) => _ = TriggerHudAsync();
         menu.Add(previewItem);
+
+        menu.Add(new NativeMenuItemSeparator());
+
+        // 开机自启：勾选项，读写当前用户 Run 键
+        var autoStartItem = new NativeMenuItem("开机自启")
+        {
+            ToggleType = NativeMenuItemToggleType.CheckBox,
+            IsChecked = Services.AutoStart.IsEnabled(),
+        };
+        autoStartItem.Click += (_, _) =>
+        {
+            if (autoStartItem.IsChecked)
+                Services.AutoStart.Enable(Services.AutoStart.CurrentExePath);
+            else
+                Services.AutoStart.Disable();
+        };
+        menu.Add(autoStartItem);
 
         menu.Add(new NativeMenuItemSeparator());
 

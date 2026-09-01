@@ -202,9 +202,8 @@ public sealed class PowerWatcher : IDisposable
             return;
         }
 
-        // 只有"插上充电器"这一侧才上报
-        if (candidate)
-            PowerSourceChanged?.Invoke(this, true);
+        // 两个方向都上报，由订阅方决定弹什么（插电=完整三态，拔电=简化电量胶囊）
+        PowerSourceChanged?.Invoke(this, candidate);
     }
 
     [System.Diagnostics.Conditional("DEBUG")]

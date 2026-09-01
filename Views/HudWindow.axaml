@@ -77,9 +77,10 @@
             <Grid.RenderTransform>
               <TranslateTransform Y="16"/>
             </Grid.RenderTransform>
+            <!-- 内圈：实心灰圆（不做环），扩散成扩大的圆盘 -->
             <Ellipse x:Name="RippleInner"
                      Width="160" Height="160"
-                     Stroke="#FF656363" StrokeThickness="60"
+                     Fill="#FF656363"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      Opacity="0" RenderTransformOrigin="50%,50%">
               <Ellipse.RenderTransform>
@@ -188,7 +189,7 @@
           <TranslateTransform X="0"/>
         </Grid.RenderTransform>
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="10"/>    <!-- 左内边距 -->
+          <ColumnDefinition Width="26"/>    <!-- 左内边距（电标/数字离左边远一点） -->
           <ColumnDefinition Width="18"/>    <!-- 方块占位（方块由 BoltIcon 提供） -->
           <ColumnDefinition Width="6"/>     <!-- 间隙 -->
           <ColumnDefinition Width="Auto"/>  <!-- Wh 组 -->
@@ -196,7 +197,7 @@
           <ColumnDefinition Width="Auto"/>  <!-- 百分比 -->
           <ColumnDefinition Width="14"/>    <!-- 间隙 -->
           <ColumnDefinition Width="Auto"/>  <!-- 徽章 -->
-          <ColumnDefinition Width="10"/>    <!-- 右内边距 -->
+          <ColumnDefinition Width="5"/>     <!-- 右内边距（徽章贴右但不完全贴死） -->
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="3" Orientation="Horizontal"

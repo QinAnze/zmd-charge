@@ -10,39 +10,39 @@ namespace EndfieldCharge.Animations;
 /// <summary>
 /// "灵动岛"三态时间线（高度 小→大→小，横向 560 恒定）：
 ///
-///   0.08-0.14  电标单独弹出
-///   0.14-0.18  胶囊背景弹出（scale 0.6→1, op 0→1，KS_Out 避免过冲闪屏）
-///   0.18-0.24  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形，加速）
-///   0.24-0.34  状态 B 短停：电标左移到 pill 内 18%，RippleHost 跟随左移；
-///                「/// INDUSTRIAL MODE + 工业模式」居中淡入；
-///                三圈波纹从 0 开始扩散（中心在电标正下方 16px，内粗外细、圈距拉开）
-///   0.34-0.40  B→C（加速）：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
+///   0.04-0.07  电标单独弹出（加速一倍）
+///   0.07-0.09  胶囊背景弹出（scale 0.6→1, op 0→1，KS_Out 避免过冲闪屏）
+///   0.09-0.12  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形）
+///   0.12-0.22  状态 B 短停：电标左移到 pill 内 18%，RippleHost 跟随左移；
+///                「/// SUPER CHARGE MODE + 超充模式」居中淡入；
+///                三圈波纹从 0 开始扩散（中心在电标正下方 16px，内实心圆外细环）
+///   0.22-0.28  B→C：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
 ///                RippleHost 跟随电标到贴左位置，数字内容淡入
-///   0.40-0.86  状态 C 停留（拉长，让电量信息是重点）
-///   0.86-0.92  整体缩小
+///   0.28-0.86  状态 C 停留（拉长，让电量信息是重点）
+///   0.86-0.89  整体缩小（加速一倍）
 ///
 /// 横向长度 560 全程恒定；高度：A(60) → B(90) → C(60)。
-/// 工业模式段压缩到 0.18-0.40（1.32s），重点留给电量显示。
+/// 弹出段 0-0.12、消失段 0.86-0.89 均按用户要求加速一倍。
 /// </summary>
 internal static class HudAnimations
 {
     public static readonly TimeSpan Timeline = TimeSpan.FromSeconds(6.0);
 
-    private const double TStart = 0.08;
-    private const double TAppear = 0.14;
-    private const double TPillOut = 0.18;
-    private const double TExpand = 0.24;
-    private const double THoldB = 0.34;
-    private const double TContract = 0.40;
+    private const double TStart = 0.04;
+    private const double TAppear = 0.07;
+    private const double TPillOut = 0.09;
+    private const double TExpand = 0.12;
+    private const double THoldB = 0.22;
+    private const double TContract = 0.28;
     private const double THoldC = 0.86;
-    private const double TClose = 0.92;
+    private const double TClose = 0.89;
 
     private const double PillRadiusA = 30d;
     private const double PillRadiusB = 18d;
     private const double PillHeightA = 60d;   // 状态 A 与 C（圆胶囊等高）
     private const double PillHeightB = 90d;   // 状态 B（工业模式高矩形）
     private const double IconOffsetB = -179d; // 状态 B：pill 560 宽，内 18% 处 → 600-0.32×560=420.8
-    private const double IconOffsetC = -259d; // 状态 C：pill 左内 12 + 半方块 9 = 341 → TX=341-600
+    private const double IconOffsetC = -245d; // 状态 C：pill 左内 26 + 半方块 9 = 355 → TX=355-600
 
     private static readonly KeySpline KS_In = new(0.42, 0, 1, 1);
     private static readonly KeySpline KS_Out = new(0, 0, 0.58, 1);
@@ -209,6 +209,55 @@ internal static class HudAnimations
         a.Children.Add(KF(TContract, KS_InOut, Op(0), SX(endScale), SY(endScale)));
         return a;
     }
+
+    // ---------------- 简化版（拔电显示电量） ----------------
+    // 只弹"电量圆胶囊"：无电标先出、无工业模式矩形、无波纹。直接全圆胶囊 + 电量内容。
+
+    public static readonly TimeSpan SimpleTimeline = TimeSpan.FromSeconds(5.0);
+
+    private const double TSimpleAppear = 0.05;  // 弹出完成（scale 0.6→1, op 0→1，加速一倍）
+    private const double TSimpleHold = 0.75;    // 停留结束
+    private const double TSimpleClose = 0.80;   // 收回完成（scale 1→0，加速一倍）
+
+    /// <summary>胶囊弹出：scale 0.6→1 + op 0→1（KS_Out 避免过冲闪屏），停留后保持。</summary>
+    public static Animation SimplePillAppear()
+    {
+        var a = NewSimple();
+        a.Children.Add(KF(0d, null, Op(0), SX(0.6), SY(0.6)));
+        a.Children.Add(KF(TSimpleAppear, KS_Out, Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(TSimpleHold, KS_In, Op(1), SX(1d), SY(1d)));
+        return a;
+    }
+
+    /// <summary>
+    /// 内容淡入（电标方块 + 数字 + 徽章）：等胶囊完全弹出（TSimpleAppear）后，
+    /// 在 0.05→0.08 之间快速显现（0.03 单位 = 0.15s）。
+    /// </summary>
+    public static Animation SimpleFadeIn()
+    {
+        var a = NewSimple();
+        a.Children.Add(KF(0d, null, Op(0)));
+        a.Children.Add(KF(TSimpleAppear, KS_In, Op(0)));
+        a.Children.Add(KF(TSimpleAppear + 0.03, KS_Out, Op(1)));
+        a.Children.Add(KF(TSimpleHold, KS_In, Op(1)));
+        return a;
+    }
+
+    /// <summary>收尾整体缩小（scale 1→0），ease-in 慢起快收。</summary>
+    public static Animation SimpleScaleOut()
+    {
+        var a = NewSimple();
+        a.Children.Add(KF(0d, null, SX(1d), SY(1d)));
+        a.Children.Add(KF(TSimpleHold, KS_In, SX(1d), SY(1d)));
+        a.Children.Add(KF(TSimpleClose, KS_In, SX(0d), SY(0d)));
+        return a;
+    }
+
+    private static Animation NewSimple() => new()
+    {
+        Duration = SimpleTimeline,
+        FillMode = FillMode.Forward,
+    };
 
     // ---------------- 构造辅助 ----------------
 

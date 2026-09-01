@@ -1,0 +1,239 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="160"
+        x:Class="EndfieldCharge.Views.HudWindow"
+        Width="1200" Height="160"
+        Title="EndfieldCharge"
+
+        SystemDecorations="None"
+        Background="Transparent"
+
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        CanResize="False"
+        Focusable="False"
+        WindowStartupLocation="Manual">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://EndfieldCharge/Styles/Geometries.axaml"/>
+        <ResourceInclude Source="avares://EndfieldCharge/Styles/HudTheme.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <!-- 胶囊是固定尺寸的"灵动岛"（560×60），整段动画宽度不变，
+       只有 CornerRadius 在全圆(30) ↔ 圆角矩形(12) 之间过渡。
+       ScaleHost 收尾整体缩放。 -->
+  <Grid x:Name="Root" Width="1200" Height="100" VerticalAlignment="Center">
+    <Grid x:Name="ScaleHost"
+          HorizontalAlignment="Center" VerticalAlignment="Center"
+          RenderTransformOrigin="50%,50%">
+      <Grid.RenderTransform>
+        <ScaleTransform ScaleX="1" ScaleY="1"/>
+      </Grid.RenderTransform>
+
+      <!-- ========== 胶囊：固定 560×60 ==========
+           PillAppear 让胶囊在电标弹入后 0.14→0.20 之间从中心弹出（scale 0.6→1, op 0→1）。
+           内嵌 RippleHost；Pill 的 ClipToBounds + CornerRadius 把扩散环裁到圆角矩形内。 -->
+      <Border x:Name="Pill"
+              Width="560" Height="60"
+              CornerRadius="30"
+              Background="#FF312F30"
+              ClipToBounds="True"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Opacity="0">
+        <Border.RenderTransform>
+          <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+        </Border.RenderTransform>
+
+        <!-- RippleHost：跟随电标 TX 移动；ClipToBounds 再次裁剪（双保险）。
+             环用大圆 + 大 scale，最终只显示 Pill 内部部分。 -->
+        <Grid x:Name="RippleHost"
+              Width="560" Height="60"
+              HorizontalAlignment="Center" VerticalAlignment="Center"
+              ClipToBounds="True"
+              IsHitTestVisible="False">
+          <Grid.RenderTransform>
+            <TranslateTransform X="0"/>
+          </Grid.RenderTransform>
+
+          <Ellipse x:Name="RippleInner"
+                   Width="100" Height="100"
+                   Stroke="#FF656363" StrokeThickness="1.2"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Opacity="0" RenderTransformOrigin="50%,50%">
+            <Ellipse.RenderTransform>
+              <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+            </Ellipse.RenderTransform>
+          </Ellipse>
+          <Ellipse x:Name="RippleMid"
+                   Width="140" Height="140"
+                   Stroke="#FF656363" StrokeThickness="1.5"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Opacity="0" RenderTransformOrigin="50%,50%">
+            <Ellipse.RenderTransform>
+              <ScaleTransform ScaleX="0.55" ScaleY="0.55"/>
+            </Ellipse.RenderTransform>
+          </Ellipse>
+          <Ellipse x:Name="RippleOuter"
+                   Width="200" Height="200"
+                   Stroke="#FF656363" StrokeThickness="2.5"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Opacity="0" RenderTransformOrigin="50%,50%">
+            <Ellipse.RenderTransform>
+              <ScaleTransform ScaleX="0.5" ScaleY="0.5"/>
+            </Ellipse.RenderTransform>
+          </Ellipse>
+        </Grid>
+      </Border>
+
+      <!-- ========== 电的图标：居中 → 左移（展开）→ 贴左（收窄），形态圆 → 方 ==========
+           电标先弹出（0.08→0.14），然后胶囊在它身后弹出 -->
+      <Grid x:Name="BoltIcon"
+            Width="46" Height="46"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            Opacity="0">
+        <Grid.RenderTransform>
+          <TransformGroup>
+            <ScaleTransform ScaleX="0.4" ScaleY="0.4"/>
+            <TranslateTransform X="0"/>
+          </TransformGroup>
+        </Grid.RenderTransform>
+
+        <!-- 圆形形态：状态 A 与 B -->
+        <Grid x:Name="CircleForm">
+          <Ellipse Width="46" Height="46" Fill="#FFE9E7E4"/>
+          <PathIcon Width="24" Height="24"
+                    Data="{DynamicResource Geo.Bolt}"
+                    Foreground="#FF141313"/>
+        </Grid>
+
+        <!-- 方形态：状态 C（26×26 圆角方块，在 46×46 容器内居中） -->
+        <Grid x:Name="SquareForm" Opacity="0">
+          <Border Width="26" Height="26"
+                  CornerRadius="6"
+                  Background="#FFE9E7E4"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center">
+            <PathIcon Width="16" Height="16"
+                      Data="{DynamicResource Geo.Bolt}"
+                      Foreground="#FF141313"/>
+          </Border>
+        </Grid>
+      </Grid>
+
+      <!-- ========== 标题态：「/// INDUSTRIAL MODE」+ 工业模式 ==========
+           居中于胶囊（pill 中心 x=600），不跟随电标位移 -->
+      <StackPanel x:Name="TitleHost"
+                  Orientation="Vertical" Spacing="2"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Opacity="0">
+        <StackPanel.RenderTransform>
+          <TranslateTransform X="0"/>
+        </StackPanel.RenderTransform>
+        <TextBlock Text="/// INDUSTRIAL MODE"
+                   FontFamily="{DynamicResource Hud.FontFamily}"
+                   FontSize="9" FontWeight="Medium"
+                   LetterSpacing="2"
+                   HorizontalAlignment="Center"
+                   Foreground="White"
+                   Opacity="0.40"/>
+        <TextBlock x:Name="TitleText"
+                   Text="工业模式"
+                   FontFamily="{DynamicResource Hud.FontFamily}"
+                   FontSize="26" FontWeight="Bold"
+                   LetterSpacing="2"
+                   HorizontalAlignment="Center"
+                   Foreground="White"/>
+      </StackPanel>
+
+      <!-- ========== 数字态：瘦长布局——方块+Wh 靠左，% + 徽章 靠右，中间留空 ==========
+           NumHost 与 Pill 等宽，* 列撑出中间约 55% 空白 -->
+      <Grid x:Name="NumHost"
+            Width="560"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            Opacity="0">
+        <Grid.RenderTransform>
+          <TranslateTransform X="0"/>
+        </Grid.RenderTransform>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="10"/>    <!-- 左内边距 -->
+          <ColumnDefinition Width="26"/>    <!-- 方块占位（方块由 BoltIcon 提供） -->
+          <ColumnDefinition Width="6"/>     <!-- 间隙 -->
+          <ColumnDefinition Width="Auto"/>  <!-- Wh 组 -->
+          <ColumnDefinition Width="*"/>     <!-- 中间留空 -->
+          <ColumnDefinition Width="Auto"/>  <!-- 百分比 -->
+          <ColumnDefinition Width="14"/>    <!-- 间隙 -->
+          <ColumnDefinition Width="Auto"/>  <!-- 徽章 -->
+          <ColumnDefinition Width="10"/>    <!-- 右内边距 -->
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="3" Orientation="Horizontal"
+                    VerticalAlignment="Center" Spacing="2">
+          <TextBlock x:Name="WhValueText"
+                     Text="0.0"
+                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontSize="26" FontWeight="SemiBold"
+                     Foreground="White"/>
+          <TextBlock x:Name="WhMaxText"
+                     Text="/0.0"
+                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontSize="14" FontWeight="Medium"
+                     Foreground="White" Opacity="0.55"
+                     VerticalAlignment="Bottom"
+                     Margin="0,0,0,2"/>
+        </StackPanel>
+
+        <StackPanel Grid.Column="5" Orientation="Horizontal"
+                    VerticalAlignment="Center" Spacing="1">
+          <TextBlock x:Name="PercentText"
+                     Text="0"
+                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontSize="22" FontWeight="SemiBold"
+                     Foreground="White"/>
+          <TextBlock Text="%"
+                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontSize="13" FontWeight="Medium"
+                     Foreground="White" Opacity="0.55"
+                     VerticalAlignment="Bottom"
+                     Margin="2,0,0,2"/>
+        </StackPanel>
+
+        <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住 -->
+        <Grid Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
+          <Ellipse Width="46" Height="46" Fill="#FF262425"
+                   Stroke="#FFC6CA4C" StrokeThickness="4.5"/>
+
+          <Border Width="18" Height="23" CornerRadius="3"
+                  Background="#FFC6CA4C"
+                  VerticalAlignment="Center"
+                  Margin="0,-2,0,0">
+            <PathIcon Width="11" Height="11"
+                      Data="{DynamicResource Geo.Bolt.Small}"
+                      Foreground="#FF262425"/>
+          </Border>
+
+          <Border Width="9" Height="3" CornerRadius="1,1,0,0"
+                  Background="#FFC6CA4C"
+                  VerticalAlignment="Center"
+                  Margin="0,-14,0,0"/>
+
+          <StackPanel Orientation="Vertical" Spacing="1.5"
+                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      Margin="0,0,7,8">
+            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
+            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
+            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
+          </StackPanel>
+        </Grid>
+      </Grid>
+
+    </Grid>
+  </Grid>
+</Window>

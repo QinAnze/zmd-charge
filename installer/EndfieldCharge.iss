@@ -34,7 +34,10 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 中文语言文件不属于 Inno Setup 官方默认安装（在官方仓库的 Languages 目录），
+; CI 机器上 compiler:Languages\ 下找不到，因此已把 ChineseSimplified.isl 打进仓库
+; （installer\Languages\），用相对路径引用（相对脚本所在目录）。
+Name: "chinesesimplified"; MessagesFile: "Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]

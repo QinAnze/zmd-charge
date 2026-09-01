@@ -13,6 +13,10 @@
     <!-- 单文件发布，方便丢进开机启动 -->
     <PublishSingleFile Condition="'$(Configuration)'=='Release'">true</PublishSingleFile>
     <SelfContained Condition="'$(Configuration)'=='Release'">false</SelfContained>
+    <!-- 无条件下发给 restore：CI 里 restore 不带 -c Release，若只有条件 RuntimeIdentifier，
+         assets 里就不会有 net8.0-windows/win-x64 目标，build/publish 会报
+         "Assets file doesn't have a target for 'net8.0-windows/win-x64'" -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <RuntimeIdentifier Condition="'$(Configuration)'=='Release'">win-x64</RuntimeIdentifier>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

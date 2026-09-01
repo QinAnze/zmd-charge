@@ -30,6 +30,14 @@
        只有 CornerRadius 在全圆(30) ↔ 圆角矩形(12) 之间过渡。
        ScaleHost 收尾整体缩放。 -->
   <Grid x:Name="Root" Width="1200" Height="100" VerticalAlignment="Center">
+    <!-- 全局缩放 0.8：整个 HUD 缩小 20% -->
+    <Grid x:Name="GlobalScale"
+          HorizontalAlignment="Center" VerticalAlignment="Center"
+          RenderTransformOrigin="50%,50%">
+      <Grid.RenderTransform>
+        <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
+      </Grid.RenderTransform>
+
     <Grid x:Name="ScaleHost"
           HorizontalAlignment="Center" VerticalAlignment="Center"
           RenderTransformOrigin="50%,50%">
@@ -53,7 +61,9 @@
         </Border.RenderTransform>
 
         <!-- RippleHost：跟随电标 TX 移动；ClipToBounds 再次裁剪（双保险）。
-             环用大圆 + 大 scale，最终只显示 Pill 内部部分。 -->
+             环用大圆 + 大 scale，最终只显示 Pill 内部部分。
+             每个波纹包一层 Host：Host 的 TranslateY 由 RippleRise 动画驱动
+             （16px 电标正下方 → 0 对齐电标圆心），波纹自身 scale 从 0 扩散。 -->
         <Grid x:Name="RippleHost"
               Width="560" Height="60"
               HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -63,40 +73,55 @@
             <TranslateTransform X="0"/>
           </Grid.RenderTransform>
 
-          <Ellipse x:Name="RippleInner"
-                   Width="100" Height="100"
-                   Stroke="#FF656363" StrokeThickness="1.2"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Opacity="0" RenderTransformOrigin="50%,50%">
-            <Ellipse.RenderTransform>
-              <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
-            </Ellipse.RenderTransform>
-          </Ellipse>
-          <Ellipse x:Name="RippleMid"
-                   Width="140" Height="140"
-                   Stroke="#FF656363" StrokeThickness="1.5"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Opacity="0" RenderTransformOrigin="50%,50%">
-            <Ellipse.RenderTransform>
-              <ScaleTransform ScaleX="0.55" ScaleY="0.55"/>
-            </Ellipse.RenderTransform>
-          </Ellipse>
-          <Ellipse x:Name="RippleOuter"
-                   Width="200" Height="200"
-                   Stroke="#FF656363" StrokeThickness="2.5"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Opacity="0" RenderTransformOrigin="50%,50%">
-            <Ellipse.RenderTransform>
-              <ScaleTransform ScaleX="0.5" ScaleY="0.5"/>
-            </Ellipse.RenderTransform>
-          </Ellipse>
+          <Grid x:Name="RippleInnerHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid.RenderTransform>
+              <TranslateTransform Y="16"/>
+            </Grid.RenderTransform>
+            <Ellipse x:Name="RippleInner"
+                     Width="160" Height="160"
+                     Stroke="#FF656363" StrokeThickness="60"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Opacity="0" RenderTransformOrigin="50%,50%">
+              <Ellipse.RenderTransform>
+                <ScaleTransform ScaleX="0.0" ScaleY="0.0"/>
+              </Ellipse.RenderTransform>
+            </Ellipse>
+          </Grid>
+          <Grid x:Name="RippleMidHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid.RenderTransform>
+              <TranslateTransform Y="16"/>
+            </Grid.RenderTransform>
+            <Ellipse x:Name="RippleMid"
+                     Width="220" Height="220"
+                     Stroke="#FF656363" StrokeThickness="1.5"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Opacity="0" RenderTransformOrigin="50%,50%">
+              <Ellipse.RenderTransform>
+                <ScaleTransform ScaleX="0.0" ScaleY="0.0"/>
+              </Ellipse.RenderTransform>
+            </Ellipse>
+          </Grid>
+          <Grid x:Name="RippleOuterHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid.RenderTransform>
+              <TranslateTransform Y="16"/>
+            </Grid.RenderTransform>
+            <Ellipse x:Name="RippleOuter"
+                     Width="280" Height="280"
+                     Stroke="#FF656363" StrokeThickness="1.2"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Opacity="0" RenderTransformOrigin="50%,50%">
+              <Ellipse.RenderTransform>
+                <ScaleTransform ScaleX="0.0" ScaleY="0.0"/>
+              </Ellipse.RenderTransform>
+            </Ellipse>
+          </Grid>
         </Grid>
       </Border>
 
       <!-- ========== 电的图标：居中 → 左移（展开）→ 贴左（收窄），形态圆 → 方 ==========
            电标先弹出（0.08→0.14），然后胶囊在它身后弹出 -->
       <Grid x:Name="BoltIcon"
-            Width="46" Height="46"
+            Width="32" Height="32"
             HorizontalAlignment="Center" VerticalAlignment="Center"
             Opacity="0">
         <Grid.RenderTransform>
@@ -106,22 +131,22 @@
           </TransformGroup>
         </Grid.RenderTransform>
 
-        <!-- 圆形形态：状态 A 与 B -->
+        <!-- 圆形形态：状态 A 与 B（白圆 32 小一圈，平行四边形 logo 18 占大头） -->
         <Grid x:Name="CircleForm">
-          <Ellipse Width="46" Height="46" Fill="#FFE9E7E4"/>
-          <PathIcon Width="24" Height="24"
+          <Ellipse Width="32" Height="32" Fill="#FFE9E7E4"/>
+          <PathIcon Width="18" Height="18"
                     Data="{DynamicResource Geo.Bolt}"
                     Foreground="#FF141313"/>
         </Grid>
 
-        <!-- 方形态：状态 C（26×26 圆角方块，在 46×46 容器内居中） -->
+        <!-- 方形态：状态 C（18×18 圆角方块，在 32×32 容器内居中，logo 12） -->
         <Grid x:Name="SquareForm" Opacity="0">
-          <Border Width="26" Height="26"
-                  CornerRadius="6"
+          <Border Width="18" Height="18"
+                  CornerRadius="4.5"
                   Background="#FFE9E7E4"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center">
-            <PathIcon Width="16" Height="16"
+            <PathIcon Width="12" Height="12"
                       Data="{DynamicResource Geo.Bolt}"
                       Foreground="#FF141313"/>
           </Border>
@@ -137,7 +162,7 @@
         <StackPanel.RenderTransform>
           <TranslateTransform X="0"/>
         </StackPanel.RenderTransform>
-        <TextBlock Text="/// INDUSTRIAL MODE"
+        <TextBlock Text="/// SUPER CHARGE MODE"
                    FontFamily="{DynamicResource Hud.FontFamily}"
                    FontSize="9" FontWeight="Medium"
                    LetterSpacing="2"
@@ -145,7 +170,7 @@
                    Foreground="White"
                    Opacity="0.40"/>
         <TextBlock x:Name="TitleText"
-                   Text="工业模式"
+                   Text="超充模式"
                    FontFamily="{DynamicResource Hud.FontFamily}"
                    FontSize="26" FontWeight="Bold"
                    LetterSpacing="2"
@@ -164,7 +189,7 @@
         </Grid.RenderTransform>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="10"/>    <!-- 左内边距 -->
-          <ColumnDefinition Width="26"/>    <!-- 方块占位（方块由 BoltIcon 提供） -->
+          <ColumnDefinition Width="18"/>    <!-- 方块占位（方块由 BoltIcon 提供） -->
           <ColumnDefinition Width="6"/>     <!-- 间隙 -->
           <ColumnDefinition Width="Auto"/>  <!-- Wh 组 -->
           <ColumnDefinition Width="*"/>     <!-- 中间留空 -->
@@ -205,35 +230,34 @@
                      Margin="2,0,0,2"/>
         </StackPanel>
 
-        <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住 -->
-        <Grid Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
-          <Ellipse Width="46" Height="46" Fill="#FF262425"
+        <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住
+             外圈 = 电量指示（≥20% 黄绿 #C6CA4C，<20% 变红 #FF4D4F）
+             内部图形 = 笔记本电脑（屏幕描边 + 底座填充） -->
+        <Grid x:Name="Badge" Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
+          <Ellipse x:Name="BadgeRing" Width="46" Height="46"
+                   Fill="#FF262425"
                    Stroke="#FFC6CA4C" StrokeThickness="4.5"/>
 
-          <Border Width="18" Height="23" CornerRadius="3"
-                  Background="#FFC6CA4C"
-                  VerticalAlignment="Center"
-                  Margin="0,-2,0,0">
-            <PathIcon Width="11" Height="11"
-                      Data="{DynamicResource Geo.Bolt.Small}"
-                      Foreground="#FF262425"/>
-          </Border>
+          <!-- 笔记本电脑图形：屏幕（描边矩形）+ 底座（填充条） -->
+          <Grid x:Name="BadgeLaptop" Width="24" Height="17" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Border x:Name="LaptopScreen"
+                    Width="17" Height="11.5" CornerRadius="1.5"
+                    BorderBrush="#FFC6CA4C" BorderThickness="2"
+                    VerticalAlignment="Top" HorizontalAlignment="Center"/>
+            <Border x:Name="LaptopBase"
+                    Width="24" Height="3" CornerRadius="1.5"
+                    Background="#FFC6CA4C"
+                    VerticalAlignment="Bottom" HorizontalAlignment="Center"/>
+          </Grid>
 
-          <Border Width="9" Height="3" CornerRadius="1,1,0,0"
+          <Border x:Name="BadgeElectrode" Width="9" Height="3" CornerRadius="1,1,0,0"
                   Background="#FFC6CA4C"
-                  VerticalAlignment="Center"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"
                   Margin="0,-14,0,0"/>
-
-          <StackPanel Orientation="Vertical" Spacing="1.5"
-                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                      Margin="0,0,7,8">
-            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
-            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
-            <Rectangle Width="4" Height="1.5" Fill="#FFC6CA4C"/>
-          </StackPanel>
         </Grid>
       </Grid>
 
+    </Grid>
     </Grid>
   </Grid>
 </Window>

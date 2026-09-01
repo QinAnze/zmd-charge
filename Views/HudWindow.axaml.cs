@@ -22,6 +22,10 @@ public partial class HudWindow : Window
 {
     private static readonly TimeSpan DismissDuration = TimeSpan.FromMilliseconds(160);
 
+    // 徽章电量颜色：≥20% 黄绿，<20% 红
+    private static readonly Color BadgeColorNormal = Color.Parse("#C6CA4C");
+    private static readonly Color BadgeColorLow = Color.Parse("#FF4D4F");
+
     private CancellationTokenSource? _cts;
 
     public HudWindow()
@@ -72,6 +76,8 @@ public partial class HudWindow : Window
             await Task.WhenAll(
                 HudAnimations.PillCorner().RunAsync(Pill, ct),
                 HudAnimations.PillAppear().RunAsync(Pill, ct),
+                HudAnimations.PillHeight().RunAsync(Pill, ct),
+                HudAnimations.PillHeight().RunAsync(RippleHost, ct),
                 HudAnimations.ScaleOut().RunAsync(ScaleHost, ct),
                 HudAnimations.BoltIcon().RunAsync(BoltIcon, ct),
                 HudAnimations.RippleHost().RunAsync(RippleHost, ct),
@@ -79,9 +85,12 @@ public partial class HudWindow : Window
                 HudAnimations.SquareForm().RunAsync(SquareForm, ct),
                 HudAnimations.TitleHost().RunAsync(TitleHost, ct),
                 HudAnimations.NumHost().RunAsync(NumHost, ct),
-                HudAnimations.Ripple(0.60, 1.5, 0.50).RunAsync(RippleInner, ct),
-                HudAnimations.Ripple(0.55, 1.7, 0.50).RunAsync(RippleMid, ct),
-                HudAnimations.Ripple(0.50, 1.7, 0.60).RunAsync(RippleOuter, ct));
+                HudAnimations.Ripple(0.0, 1.5, 0.50).RunAsync(RippleInner, ct),
+                HudAnimations.Ripple(0.0, 2.0, 0.50).RunAsync(RippleMid, ct),
+                HudAnimations.Ripple(0.0, 2.5, 0.60).RunAsync(RippleOuter, ct),
+                HudAnimations.RippleRise().RunAsync(RippleInnerHost, ct),
+                HudAnimations.RippleRise().RunAsync(RippleMidHost, ct),
+                HudAnimations.RippleRise().RunAsync(RippleOuterHost, ct));
         }
         catch (OperationCanceledException)
         {
@@ -134,9 +143,17 @@ public partial class HudWindow : Window
             return;
         }
 
-        WhValueText.Text = snap.RemainingWh.ToString("F1");
-        WhMaxText.Text = $"/{snap.FullWh:F1}";
+        // mWh（原视频即显示 mWh 整数，如 "3725 /4240"）
+        WhValueText.Text = (snap.RemainingWh * 1000).ToString("F0");
+        WhMaxText.Text = $"/{snap.FullWh * 1000:F0}";
         PercentText.Text = snap.Percent.ToString();
+
+        // 电量圈变色：≥20% 黄绿，<20% 红色
+        var badgeColor = snap.Percent < 20 ? BadgeColorLow : BadgeColorNormal;
+        BadgeRing.Stroke = new SolidColorBrush(badgeColor);
+        LaptopScreen.BorderBrush = new SolidColorBrush(badgeColor);
+        LaptopBase.Background = new SolidColorBrush(badgeColor);
+        BadgeElectrode.Background = new SolidColorBrush(badgeColor);
     }
 
     // ---------------- 动画复位 ----------------
@@ -152,7 +169,9 @@ public partial class HudWindow : Window
         // 收尾缩放容器复位
         ScaleHost.RenderTransform = new ScaleTransform(1d, 1d);
 
-        // 胶囊：固定 560×60，全圆角（状态 A），待 PillAppear 弹出
+        // 胶囊：560×60，全圆角（状态 A），待 PillAppear 弹出
+        Pill.Width = 560;
+        Pill.Height = 60;
         Pill.CornerRadius = new CornerRadius(30d);
         Pill.Opacity = 0;
         Pill.RenderTransform = new ScaleTransform(0.6d, 0.6d);
@@ -167,12 +186,17 @@ public partial class HudWindow : Window
         };
         BoltIcon.Opacity = 0;
 
-        // 三圈波纹复位
-        RippleInner.RenderTransform = new ScaleTransform(0.6d, 0.6d);
+        // 波纹 Host：初始在电标正下方 16px（RippleRise 抬升回 0 对齐电标圆心）
+        RippleInnerHost.RenderTransform = new TranslateTransform(0d, 16d);
+        RippleMidHost.RenderTransform = new TranslateTransform(0d, 16d);
+        RippleOuterHost.RenderTransform = new TranslateTransform(0d, 16d);
+
+        // 三圈波纹复位（从 0 尺寸开始扩散）
+        RippleInner.RenderTransform = new ScaleTransform(0d, 0d);
         RippleInner.Opacity = 0;
-        RippleMid.RenderTransform = new ScaleTransform(0.55d, 0.55d);
+        RippleMid.RenderTransform = new ScaleTransform(0d, 0d);
         RippleMid.Opacity = 0;
-        RippleOuter.RenderTransform = new ScaleTransform(0.5d, 0.5d);
+        RippleOuter.RenderTransform = new ScaleTransform(0d, 0d);
         RippleOuter.Opacity = 0;
 
         // 形态：圆隐藏（由动画淡入）、方隐藏
@@ -192,16 +216,18 @@ public partial class HudWindow : Window
     private void ShowFullyExpandedStatic()
     {
         ScaleHost.RenderTransform = new ScaleTransform(1d, 1d);
+        Pill.Width = 560;
+        Pill.Height = 60;
         Pill.CornerRadius = new CornerRadius(30d);
         Pill.Opacity = 1;
         Pill.RenderTransform = new ScaleTransform(1d, 1d);
 
-        RippleHost.RenderTransform = new TranslateTransform(-255d, 0d);
+        RippleHost.RenderTransform = new TranslateTransform(-259d, 0d);
 
-        // 电标：贴胶囊左侧（pill 560, left=320, icon center = 320+12+13 = 345, TX=-255）
+        // 电标：贴胶囊左侧（pill 560, left=320, 方块 18 半宽 9 → icon center = 320+12+9 = 341, TX=-259）
         BoltIcon.RenderTransform = new TransformGroup
         {
-            Children = { new ScaleTransform(1d, 1d), new TranslateTransform(-255d, 0d) },
+            Children = { new ScaleTransform(1d, 1d), new TranslateTransform(-259d, 0d) },
         };
         BoltIcon.Opacity = 1;
         CircleForm.Opacity = 0;

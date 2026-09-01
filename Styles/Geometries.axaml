@@ -5,11 +5,12 @@
        图标几何：24×24 网格，统一线性/实心极简风格，单色（无 emoji）
        ============================================================ -->
 
-  <!-- 闪电：HUD 主图标，置于白色圆底上 -->
-  <StreamGeometry x:Key="Geo.Bolt">M13 2 L4.09 12.97 H10.5 L9 22 L18 10.5 H11.59 L15 2 Z</StreamGeometry>
+  <!-- 闪电：HUD 主图标，由上下两个平行四边形 fill 拼成（参考原视频）
+     底边比顶边宽（梯形），让电标看着更宽更稳 -->
+  <StreamGeometry x:Key="Geo.Bolt">M13 2 L4 13 L12 13 L18 2 Z M13 11 L20 11 L13 22 L4 22 Z</StreamGeometry>
 
-  <!-- 闪电：绿色进度环中心的小号实心 -->
-  <StreamGeometry x:Key="Geo.Bolt.Small">M13 3 L5.5 13.4 H10.6 L9.4 21 L17 10.2 H11.8 L14.4 3 Z</StreamGeometry>
+  <!-- 闪电：黄绿徽章中心的小号双平行四边形 -->
+  <StreamGeometry x:Key="Geo.Bolt.Small">M12 3 L5 12 L10 12 L16 3 Z M13 12 L19 12 L12 21 L6 21 Z</StreamGeometry>
 
   <!-- 插头 / 交流：拔电或未接电源时的备用图标 -->
   <StreamGeometry x:Key="Geo.Plug">M12 2 C9.24 2 7 4.24 7 7 V10 H9 V7 C9 5.34 10.34 4 12 4 C13.66 4 15 5.34 15 7 V10 H17 V7 C17 4.24 14.76 2 12 2 Z M8 12 H16 V15 C16 17.21 14.21 19 12 19 C9.79 19 8 17.21 8 15 V12 Z M10 19.5 H14 V22 H10 V19.5 Z</StreamGeometry>

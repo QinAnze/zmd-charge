@@ -64,3 +64,4 @@ D:\testworld\endfield\EndfieldCharge\bin\Debug\net8.0-windows\runtimes\win\lib\n
 D:\testworld\endfield\EndfieldCharge\obj\Debug\net8.0-windows\Endfield.5B358C80.Up2Date
 D:\testworld\endfield\EndfieldCharge\obj\Debug\net8.0-windows\EndfieldCharge.genruntimeconfig.cache
 D:\testworld\endfield\EndfieldCharge\obj\Debug\net8.0-windows\ref\EndfieldCharge.dll
+D:\testworld\endfield\EndfieldCharge\obj\Debug\net8.0-windows\EndfieldCharge.sourcelink.json

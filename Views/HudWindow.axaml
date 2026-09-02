@@ -232,12 +232,19 @@
         </StackPanel>
 
         <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住
-             外圈 = 电量指示（≥20% 黄绿 #C6CA4C，<20% 变红 #FF4D4F）
+             底：暗色圆盘
+             外圈：进度圆弧（弧长 = 电量百分比，12 点方向起顺时针），几何在代码里按百分比生成
+             颜色：≥20% 黄绿 #C6CA4C，<20% 变红 #FF4D4F
              内部图形 = 笔记本电脑（屏幕描边 + 底座填充） -->
         <Grid x:Name="Badge" Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
-          <Ellipse x:Name="BadgeRing" Width="46" Height="46"
-                   Fill="#FF262425"
-                   Stroke="#FFC6CA4C" StrokeThickness="4.5"/>
+          <Ellipse Width="46" Height="46" Fill="#FF262425"/>
+
+          <Path x:Name="BadgeArc"
+                Width="46" Height="46"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Stretch="None"
+                Stroke="#FFC6CA4C" StrokeThickness="4.5"
+                StrokeLineCap="Round"/>
 
           <!-- 笔记本电脑图形：屏幕（描边矩形）+ 底座（填充条） -->
           <Grid x:Name="BadgeLaptop" Width="24" Height="17" VerticalAlignment="Center" HorizontalAlignment="Center">

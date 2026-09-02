@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -8,6 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using EndfieldCharge.Animations;
 using EndfieldCharge.Services;
 
@@ -45,7 +47,6 @@ public partial class HudWindow : Window
     public async Task ShowSimpleAsync(BatterySnapshot? battery)
     {
         ApplyBattery(battery, acOnline: false);
-        PositionTopCenter();
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -55,8 +56,7 @@ public partial class HudWindow : Window
         ResetToInitial();
         SetSimpleCState();
 
-        if (!IsVisible)
-            Show();
+        ShowPositioned();
 
         try
         {
@@ -79,7 +79,6 @@ public partial class HudWindow : Window
     public async Task ShowAndPlayAsync(BatterySnapshot? battery, bool acOnline)
     {
         ApplyBattery(battery, acOnline);
-        PositionTopCenter();
 
         // 打断上一次播放
         _cts?.Cancel();
@@ -91,11 +90,7 @@ public partial class HudWindow : Window
 
         ResetToInitial();
 
-        if (!IsVisible)
-            Show();
-
-        if (!IsVisible)
-            Show();
+        ShowPositioned();
 
         if (debugStatic)
         {
@@ -169,28 +164,82 @@ public partial class HudWindow : Window
 
     // ---------------- 数据绑定（直接赋值，无 MVVM 开销） ----------------
 
+    private const double RingDiameter = 46d;
+    private const double RingThickness = 4.5d;
+
     private void ApplyBattery(BatterySnapshot? snap, bool acOnline)
     {
+        double fraction = 0d;
+
         if (snap is null || !snap.HasBattery)
         {
-            // 台式机 / 读不到电池：不编数字
+            // 台式机 / 读不到电池：不编数字，圆环留空
             WhValueText.Text = "--";
             WhMaxText.Text = string.Empty;
             PercentText.Text = "--";
-            return;
+        }
+        else
+        {
+            // mWh（原视频即显示 mWh 整数，如 "3725 /4240"）
+            WhValueText.Text = (snap.RemainingWh * 1000).ToString("F0");
+            WhMaxText.Text = $"/{snap.FullWh * 1000:F0}";
+            PercentText.Text = snap.Percent.ToString();
+            fraction = Math.Clamp(snap.Percent / 100d, 0d, 1d);
         }
 
-        // mWh（原视频即显示 mWh 整数，如 "3725 /4240"）
-        WhValueText.Text = (snap.RemainingWh * 1000).ToString("F0");
-        WhMaxText.Text = $"/{snap.FullWh * 1000:F0}";
-        PercentText.Text = snap.Percent.ToString();
+        // 电量圆环：弧长按电量百分比绘制（0% 时不画，100% 时几乎闭合）
+        BadgeArc.Data = BuildRingGeometry(fraction, RingDiameter, RingThickness);
 
         // 电量圈变色：≥20% 黄绿，<20% 红色
-        var badgeColor = snap.Percent < 20 ? BadgeColorLow : BadgeColorNormal;
-        BadgeRing.Stroke = new SolidColorBrush(badgeColor);
+        var badgeColor = snap is not null && snap.HasBattery && snap.Percent < 20
+            ? BadgeColorLow
+            : BadgeColorNormal;
+        BadgeArc.Stroke = new SolidColorBrush(badgeColor);
         LaptopScreen.BorderBrush = new SolidColorBrush(badgeColor);
         LaptopBase.Background = new SolidColorBrush(badgeColor);
         BadgeElectrode.Background = new SolidColorBrush(badgeColor);
+    }
+
+    /// <summary>
+    /// 生成"电量进度圆环"几何：从 12 点方向起顺时针，弧长 = fraction × 360°。
+    /// fraction=1 时收在 359.5°，避免整圆 ArcSegment 退化成不可见。
+    /// </summary>
+    private static Geometry BuildRingGeometry(double fraction, double diameter, double thickness)
+    {
+        double radius = (diameter - thickness) / 2d;
+        var center = new Point(diameter / 2d, diameter / 2d);
+
+        double sweep = 360d * Math.Clamp(fraction, 0d, 1d);
+        if (sweep < 0.5d)
+            sweep = 0.5d;      // 0% 也留一个圆点（Round 端点下可见）
+        if (sweep > 359.5d)
+            sweep = 359.5d;
+
+        const double startAngle = -90d; // 12 点方向
+        var start = PointOnCircle(center, radius, startAngle);
+        var end = PointOnCircle(center, radius, startAngle + sweep);
+
+        var figure = new PathFigure { StartPoint = start, IsClosed = false };
+        figure.Segments = new PathSegments
+        {
+            new ArcSegment
+            {
+                Point = end,
+                Size = new Size(radius, radius),
+                RotationAngle = 0d,
+                IsLargeArc = sweep > 180d,
+                SweepDirection = SweepDirection.Clockwise,
+            },
+        };
+
+        return new PathGeometry { Figures = new PathFigures { figure } };
+    }
+
+    /// <summary>角度以度为单位，0° 指向 +X（3 点方向），顺时针增大。</summary>
+    private static Point PointOnCircle(Point center, double radius, double degrees)
+    {
+        double rad = degrees * Math.PI / 180d;
+        return new Point(center.X + radius * Math.Cos(rad), center.Y + radius * Math.Sin(rad));
     }
 
     // ---------------- 动画复位 ----------------
@@ -298,8 +347,10 @@ public partial class HudWindow : Window
         CircleForm.Opacity = 0;
         SquareForm.Opacity = 1;
 
-        // 标题 / 波纹全程隐藏
+        // 标题 / 波纹全程隐藏（RippleHost 也归位，避免沿用上一段动画残留的位移）
         TitleHost.Opacity = 0;
+        RippleHost.Height = 60;
+        RippleHost.RenderTransform = new TranslateTransform(0d, 0d);
         RippleInnerHost.RenderTransform = new TranslateTransform(0d, 16d);
         RippleMidHost.RenderTransform = new TranslateTransform(0d, 16d);
         RippleOuterHost.RenderTransform = new TranslateTransform(0d, 16d);
@@ -314,27 +365,57 @@ public partial class HudWindow : Window
 
     // ---------------- 定位 ----------------
 
-    /// <summary>把窗口贴到主显示器顶部居中。强制主屏，避免窗口上次被拖到副屏后弹错位置。</summary>
+    /// <summary>
+    /// 把窗口贴到主显示器顶部居中。
+    /// 三个坑都堵掉：
+    ///   1) 绝不退回 Screens.ScreenFromVisual——它返回"窗口当前所在屏"，
+    ///      一旦某次落到副屏就再也回不来（表现为乱跑到别的显示器）；
+    ///   2) 用窗口自身的 RenderScaling 换算物理宽度——隐藏窗口跨屏 / DPI 变化后
+    ///      screen.Scaling 与实际生效缩放不一致，宽度算小会让窗口整体偏右；
+    ///   3) 不再改写 Width——宽度固定，只算居中偏移，避免重复触发时位置一次比一次偏。
+    /// </summary>
     private void PositionTopCenter()
     {
-        // 主屏优先：Screens.ScreenFromVisual 会返回"当前窗口所在屏"，
-        // 若窗口历史位置在副屏，HUD 就会弹到副屏上方 → 强制用 Screens.Primary。
-        var screen = Screens.Primary ?? Screens.ScreenFromVisual(this);
+        var screen = Screens.Primary ?? Screens.All.FirstOrDefault();
         if (screen is null)
             return;
 
-        var area = screen.WorkingArea;
-        double scaling = screen.Scaling <= 0 ? 1d : screen.Scaling;
+        var area = screen.WorkingArea;   // 物理像素
 
-        // 窗口逻辑宽度不得超过屏幕（小屏 / 高 DPI 下 1200 会超出）
-        double maxLogicalWidth = area.Width / scaling;
-        if (Width > maxLogicalWidth)
-            Width = maxLogicalWidth;
+        double scaling = RenderScaling > 0
+            ? RenderScaling
+            : (screen.Scaling > 0 ? screen.Scaling : 1d);
 
         int pixelWidth = (int)Math.Round(Width * scaling);
         int x = area.X + (area.Width - pixelWidth) / 2;
-        int y = area.Y;
 
-        Position = new PixelPoint(x, y);
+        Position = new PixelPoint(x, area.Y);
+    }
+
+    /// <summary>
+    /// 定位并显示窗口：Show 前先定一次（避免闪现在旧位置），Show 后再定一次，
+    /// 并在下一帧补定一次。
+    /// 原因：对隐藏窗口的 SetWindowPos 在部分平台会被推迟到显示时才生效，
+    /// 且 Show 之后若发生 DPI 变化，窗口物理宽度会变，居中偏移必须重算。
+    /// 这是"第一次位置正常、第二次开始偏移"的根治办法——位置每次都重新算，不依赖残留值。
+    /// </summary>
+    private void ShowPositioned()
+    {
+        PositionTopCenter();
+
+        if (!IsVisible)
+            Show();
+
+        PositionTopCenter();
+        Dispatcher.UIThread.Post(() =>
+        {
+            PositionTopCenter();
+
+            // 兜底自检：多屏 / DPI 变化时系统可能在 Show 之后把窗口挪走，
+            // 这里再确认一次"是否真的落在主屏"，不在就强制拉回。
+            var current = Screens.ScreenFromWindow(this);
+            if (current is not null && !ReferenceEquals(current, Screens.Primary))
+                PositionTopCenter();
+        }, DispatcherPriority.Loaded);
     }
 }

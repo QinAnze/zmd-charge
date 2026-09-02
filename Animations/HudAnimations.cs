@@ -10,19 +10,20 @@ namespace EndfieldCharge.Animations;
 /// <summary>
 /// "灵动岛"三态时间线（高度 小→大→小，横向 560 恒定）：
 ///
-///   0.04-0.07  电标单独弹出（加速一倍）
+///   0.04-0.10  电标单独弹出（缩放回弹）
 ///   0.07-0.09  胶囊背景弹出（scale 0.6→1, op 0→1，KS_Out 避免过冲闪屏）
 ///   0.09-0.12  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形）
-///   0.12-0.22  状态 B 短停：电标左移到 pill 内 18%，RippleHost 跟随左移；
-///                「/// SUPER CHARGE MODE + 超充模式」居中淡入；
-///                三圈波纹从 0 开始扩散（中心在电标正下方 16px，内实心圆外细环）
-///   0.22-0.28  B→C：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
-///                RippleHost 跟随电标到贴左位置，数字内容淡入
-///   0.28-0.86  状态 C 停留（拉长，让电量信息是重点）
-///   0.86-0.89  整体缩小（加速一倍）
+///   0.12-0.20  电标从中间平滑滑到左侧 B 位（0.48s，easeInOutCubic，无过冲）；
+///               RippleHost 用同一条曲线同步跟随，三圈波纹同时从 0 扩散
+///   0.20-0.25  「/// SUPER CHARGE MODE + 超充模式」居中淡入（等电标停稳再出）
+///   0.25-0.30  状态 B 短停
+///   0.30-0.36  B→C：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
+///               电标从 B 位滑到贴左 C 位，数字内容淡入
+///   0.36-0.86  状态 C 停留（拉长，让电量信息是重点）
+///   0.86-0.89  整体缩小
 ///
 /// 横向长度 560 全程恒定；高度：A(60) → B(90) → C(60)。
-/// 弹出段 0-0.12、消失段 0.86-0.89 均按用户要求加速一倍。
+/// 注意：KeyFrame 的 Cue 必须严格递增（乱序会让某一段被压缩到 30ms，位移看起来像瞬移）。
 /// </summary>
 internal static class HudAnimations
 {
@@ -31,9 +32,12 @@ internal static class HudAnimations
     private const double TStart = 0.04;
     private const double TAppear = 0.07;
     private const double TPillOut = 0.09;
-    private const double TExpand = 0.12;
-    private const double THoldB = 0.22;
-    private const double TContract = 0.28;
+    private const double TBoltPop = 0.10;   // 电标弹出到位（缩放回弹峰值）
+    private const double TExpand = 0.12;    // pill 撑高到 B 完成
+    private const double TMove = 0.20;      // 电标 + RippleHost 平滑滑到左侧 B 位
+    private const double TTitle = 0.25;     // 标题淡入完成
+    private const double THoldB = 0.30;     // B 态结束
+    private const double TContract = 0.36;  // B→C 收窄完成
     private const double THoldC = 0.86;
     private const double TClose = 0.89;
 
@@ -48,6 +52,8 @@ internal static class HudAnimations
     private static readonly KeySpline KS_Out = new(0, 0, 0.58, 1);
     private static readonly KeySpline KS_InOut = new(0.42, 0, 0.58, 1);
     private static readonly KeySpline KS_BackOut = new(0.175, 0.885, 0.32, 1.275);
+    /// <summary>easeInOutCubic：位移专用——两端慢中间快，且不过冲，滑动观感最顺。</summary>
+    private static readonly KeySpline KS_Smooth = new(0.65, 0, 0.35, 1);
 
     // ===================================================================
 
@@ -107,31 +113,38 @@ internal static class HudAnimations
         return a;
     }
 
-    /// <summary>电标：先弹出（0.08→0.14）→ 胶囊完全弹出后微移（0.20→0.28 左移到 B 位置）→ B→C 时再微移到 C 位置。</summary>
+    /// <summary>
+    /// 电标：弹出（缩放回弹）→ 停留中央 → 平滑滑到左侧 B 位 → B→C 再滑到贴左 C 位。
+    /// 位移一律用 KS_Smooth（easeInOutCubic）+ 0.48s / 0.36s 的独立时间片，
+    /// 不再用 KS_BackOut（它 80% 的行程在前 20% 时间内跑完，179px 看着就是瞬移）。
+    /// Cue 严格递增：0 → 0.04 → 0.10 → 0.12 → 0.20 → 0.30 → 0.36 → 0.86。
+    /// </summary>
     public static Animation BoltIcon()
     {
         var a = New();
         a.Children.Add(KF(0.00, null, Op(0), SX(0.4), SY(0.4), TX(0)));
         a.Children.Add(KF(TStart, KS_In, Op(0), SX(0.4), SY(0.4), TX(0)));
-        a.Children.Add(KF(0.115, KS_BackOut, Op(1), SX(1.12), SY(1.12), TX(0)));
-        a.Children.Add(KF(TAppear, KS_Out, Op(1), SX(1), SY(1), TX(0)));
-        a.Children.Add(KF(TExpand, KS_BackOut, Op(1), SX(1), SY(1), TX(IconOffsetB)));
-        a.Children.Add(KF(THoldB, KS_InOut, Op(1), SX(1), SY(1), TX(IconOffsetB)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        a.Children.Add(KF(TBoltPop, KS_BackOut, Op(1), SX(1.12), SY(1.12), TX(0)));
+        a.Children.Add(KF(TExpand, KS_Out, Op(1), SX(1), SY(1), TX(0)));
+        a.Children.Add(KF(TMove, KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetB)));
+        a.Children.Add(KF(THoldB, KS_In, Op(1), SX(1), SY(1), TX(IconOffsetB)));
+        a.Children.Add(KF(TContract, KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        a.Children.Add(KF(THoldC, KS_In, Op(1), SX(1), SY(1), TX(IconOffsetC)));
         return a;
     }
 
     /// <summary>
     /// RippleHost 跟随电标位移：状态 A 居中 → 状态 B 左移（与 BoltIcon 同步）。
-    /// 不用 KS_BackOut：位移过冲会让波纹瞬间跳出胶囊外。
+    /// 必须与 BoltIcon 使用同一条曲线、同一段时间片，否则波纹会和电标脱开。
     /// </summary>
     public static Animation RippleHost()
     {
         var a = New();
         a.Children.Add(KF(0d, null, TX(0)));
-        a.Children.Add(KF(TExpand, KS_InOut, TX(IconOffsetB)));
-        a.Children.Add(KF(THoldB, KS_InOut, TX(IconOffsetB)));
-        a.Children.Add(KF(TContract, KS_InOut, TX(IconOffsetC)));
+        a.Children.Add(KF(TExpand, KS_In, TX(0)));
+        a.Children.Add(KF(TMove, KS_Smooth, TX(IconOffsetB)));
+        a.Children.Add(KF(THoldB, KS_In, TX(IconOffsetB)));
+        a.Children.Add(KF(TContract, KS_Smooth, TX(IconOffsetC)));
         return a;
     }
 
@@ -157,13 +170,16 @@ internal static class HudAnimations
         return a;
     }
 
-    /// <summary>标题态：居中于胶囊，0.28→0.34 淡入，0.44→0.50 随工业模式一起淡出。</summary>
+    /// <summary>
+    /// 标题态：居中于胶囊。等电标滑到位（TMove）之后才淡入 0.20→0.25，
+    /// 保证"电标先滑到左边 → 再出超充模式"的先后顺序。
+    /// </summary>
     public static Animation TitleHost()
     {
         var a = New();
         a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(TExpand, KS_In, Op(0)));
-        a.Children.Add(KF(TExpand + 0.06, KS_Out, Op(1)));
+        a.Children.Add(KF(TMove, KS_In, Op(0)));
+        a.Children.Add(KF(TTitle, KS_Out, Op(1)));
         a.Children.Add(KF(THoldB, KS_In, Op(1)));
         a.Children.Add(KF(TContract, KS_InOut, Op(0)));
         return a;

@@ -8,6 +8,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using EndfieldCharge.Services;
+using EndfieldCharge.Settings;
 using EndfieldCharge.Views;
 
 namespace EndfieldCharge;
@@ -17,6 +18,10 @@ public partial class App : Application
     private PowerWatcher? _watcher;
     private HudWindow? _hud;
     private TrayIcon? _tray;
+    private TrayMenuWindow? _trayMenu;
+    private AppSettings _settings = new();
+    private IClassicDesktopStyleApplicationLifetime? _desktop;
+    private bool _lastLowBatteryNotified;
 
     public override void Initialize()
     {
@@ -25,31 +30,61 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+            return;
+
+        _desktop = desktop;
+
+        // 加载设置
+        _settings = SettingsManager.Load();
+        Localization.UseSettings(_settings);
+        Logger.Enabled = true; // 可改为设置项
+
+        // 全局未捕获异常兜底
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            // 没有常驻主窗口，退出必须由托盘菜单显式触发
-            desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            desktop.Exit += OnDesktopExit;
+            Logger.Error(e.ExceptionObject as Exception ?? new Exception("Unknown unhandled error"));
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Logger.Error(e.Exception);
+            e.SetObserved();
+        };
 
-            _hud = new HudWindow();
+        desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        desktop.Exit += OnDesktopExit;
 
-            SetupTrayIcon(desktop);
-            StartPowerWatching();
+        _hud = new HudWindow();
+        _hud.ApplySettings(_settings);
 
-            // 调试/自查入口：不用真的插拔电源也能看动画
-            //   --preview         用本机真实电池数据播放一次（完整版：插电）
-            //   --demo            用示例数据播放一次（台式机 / 读不到电池时用）
-            //   --preview-unplug  用示例数据播放一次（简化版：拔电只弹电量胶囊）
-            if (HasCommandLineArg("--demo"))
-                _ = PreviewWithSampleDataAsync();
-            else if (HasCommandLineArg("--preview-unplug"))
-                _ = PreviewSimpleAsync();
-            else if (HasCommandLineArg("--preview"))
-                _ = TriggerHudAsync();
-        }
+        SetupTrayIcon(desktop);
+        StartPowerWatching();
+
+        // 调试命令行参数
+        if (HasCommandLineArg("--demo"))
+            _ = PreviewWithSampleDataAsync();
+        else if (HasCommandLineArg("--preview-unplug"))
+            _ = PreviewSimpleAsync();
+        else if (HasCommandLineArg("--preview"))
+            _ = TriggerHudAsync();
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    // ---------------- 设置 ----------------
+
+    public void OnSettingsChanged(AppSettings settings)
+    {
+        _settings = settings;
+        Localization.UseSettings(settings);
+        _hud?.ApplySettings(settings);
+
+        // 更新托盘提示
+        if (_tray is not null)
+            _tray.ToolTipText = Localization.TrayTooltip;
+    }
+
+    // ---------------- 命令行参数 ----------------
 
     private static bool HasCommandLineArg(string name)
     {
@@ -62,34 +97,26 @@ public partial class App : Application
         return false;
     }
 
-    /// <summary>用示例数据播放一次，用于在没有电池或无法插拔时检查动画。</summary>
+    // ---------------- 预览 ----------------
+
     private async Task PreviewWithSampleDataAsync()
     {
-        if (_hud is null)
-            return;
+        if (_hud is null) return;
 
-        var sample = new Services.BatterySnapshot(
-            RemainingWh: 62.4,
-            FullWh: 90.0,
-            Percent: 69,
-            AcOnline: true,
-            Charging: true);
+        var sample = new BatterySnapshot(
+            RemainingWh: 62.4, FullWh: 90.0,
+            Percent: 69, AcOnline: true, Charging: true);
 
         await _hud.ShowAndPlayAsync(sample, acOnline: true);
     }
 
-    /// <summary>用示例数据播放一次简化版（拔电只弹电量圆胶囊）。</summary>
     private async Task PreviewSimpleAsync()
     {
-        if (_hud is null)
-            return;
+        if (_hud is null) return;
 
-        var sample = new Services.BatterySnapshot(
-            RemainingWh: 62.4,
-            FullWh: 90.0,
-            Percent: 69,
-            AcOnline: false,
-            Charging: false);
+        var sample = new BatterySnapshot(
+            RemainingWh: 62.4, FullWh: 90.0,
+            Percent: 69, AcOnline: false, Charging: false);
 
         await _hud.ShowSimpleAsync(sample);
     }
@@ -100,15 +127,14 @@ public partial class App : Application
     {
         _watcher = new PowerWatcher();
 
-        // 事件在后台线程触发，切回 UI 线程再操作窗口
         _watcher.PowerSourceChanged += (_, acOnline) =>
         {
             Dispatcher.UIThread.Post(() =>
             {
                 if (acOnline)
-                    _ = TriggerHudAsync();       // 插电：完整三态动画
+                    _ = TriggerHudAsync();
                 else
-                    _ = TriggerSimpleHudAsync(); // 拔电：只弹电量圆胶囊
+                    _ = TriggerSimpleHudAsync();
             });
         };
 
@@ -117,10 +143,8 @@ public partial class App : Application
 
     private async Task TriggerSimpleHudAsync()
     {
-        if (_hud is null)
-            return;
+        if (_hud is null) return;
 
-        // 电池读取可能走 WMI 兜底，放在线程池里避免卡 UI
         var (snapshot, _) = await Task.Run(() =>
         {
             PowerNative.TryGetAcOnline(out bool ac);
@@ -132,10 +156,8 @@ public partial class App : Application
 
     private async Task TriggerHudAsync()
     {
-        if (_hud is null)
-            return;
+        if (_hud is null) return;
 
-        // 电池读取可能走 WMI 兜底，放在线程池里避免卡 UI
         var (snapshot, acOnline) = await Task.Run(() =>
         {
             PowerNative.TryGetAcOnline(out bool ac);
@@ -143,47 +165,184 @@ public partial class App : Application
         });
 
         await _hud.ShowAndPlayAsync(snapshot, acOnline);
+
+        // 检查提醒条件
+        if (snapshot is not null)
+            CheckAlerts(snapshot);
+    }
+
+    /// <summary>检查并触发低电量 / 充满提醒。</summary>
+    private void CheckAlerts(BatterySnapshot snap)
+    {
+        if (!snap.HasBattery) return;
+
+        // 充满提醒（充电中且 >= 99%）
+        if (_settings.EnableFullChargeAlert && snap.Charging && snap.Percent >= 99)
+        {
+            _ = ShowAlertAsync(Localization.FullChargeTitle, Localization.FullChargeMsg);
+        }
+
+        // 低电量提醒（放电中且低于阈值，每轮只提醒一次）
+        if (_settings.EnableLowBatteryAlert && !snap.Charging && snap.Percent <= _settings.LowBatteryThreshold)
+        {
+            if (!_lastLowBatteryNotified)
+            {
+                _lastLowBatteryNotified = true;
+                _ = ShowAlertAsync(Localization.LowBatteryTitle, Localization.LowBatteryMsg(snap.Percent));
+            }
+        }
+        else
+        {
+            _lastLowBatteryNotified = false;
+        }
+    }
+
+    /// <summary>弹出一个卡牌风格提醒窗口，4 秒后自动消失。</summary>
+    private static async Task ShowAlertAsync(string title, string message)
+    {
+        var alert = new Window
+        {
+            Title = title,
+            Width = 340, Height = 140,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#18181A")),
+            Foreground = Avalonia.Media.Brushes.White,
+            CanResize = false,
+            SystemDecorations = SystemDecorations.BorderOnly,
+            Topmost = true,
+            FontFamily = new Avalonia.Media.FontFamily("HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif"),
+        };
+
+        var card = new Border
+        {
+            Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#232325")),
+            CornerRadius = new Avalonia.CornerRadius(10),
+            Margin = new Avalonia.Thickness(12),
+            Padding = new Avalonia.Thickness(18, 16),
+        };
+
+        var stack = new StackPanel { Spacing = 10 };
+        stack.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 15,
+            FontWeight = Avalonia.Media.FontWeight.SemiBold,
+            Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#C6CA4C")),
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = message,
+            FontSize = 13,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#C8C8C8")),
+        });
+        card.Child = stack;
+        alert.Content = card;
+
+        // 入场动画
+        alert.Opacity = 0;
+        alert.RenderTransform = new Avalonia.Media.ScaleTransform(0.92, 0.92);
+        alert.RenderTransformOrigin = new Avalonia.RelativePoint(0.5, 0.5, Avalonia.RelativeUnit.Relative);
+
+        alert.Show();
+
+        var fadeIn = new Avalonia.Animation.Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(150),
+            FillMode = Avalonia.Animation.FillMode.Forward,
+            Easing = new Avalonia.Animation.Easings.QuadraticEaseOut(),
+            Children =
+            {
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(0d), Setters = { new Avalonia.Styling.Setter(Avalonia.Visual.OpacityProperty, 0d) } },
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(1d), Setters = { new Avalonia.Styling.Setter(Avalonia.Visual.OpacityProperty, 1d) } },
+            },
+        };
+        _ = fadeIn.RunAsync(alert);
+
+        await Task.Delay(4000);
+
+        // 退场
+        var fadeOut = new Avalonia.Animation.Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(120),
+            FillMode = Avalonia.Animation.FillMode.Forward,
+            Easing = new Avalonia.Animation.Easings.QuadraticEaseIn(),
+            Children =
+            {
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(0d), Setters = { new Avalonia.Styling.Setter(Avalonia.Visual.OpacityProperty, 1d) } },
+                new Avalonia.Animation.KeyFrame { Cue = new Avalonia.Animation.Cue(1d), Setters = { new Avalonia.Styling.Setter(Avalonia.Visual.OpacityProperty, 0d) } },
+            },
+        };
+        await fadeOut.RunAsync(alert);
+        if (alert.IsVisible)
+            alert.Close();
     }
 
     // ---------------- 托盘 ----------------
 
     private void SetupTrayIcon(IClassicDesktopStyleApplicationLifetime desktop)
     {
+        // 原生菜单（右击兜底）：保留完整功能
         var menu = new NativeMenu();
 
-        var previewItem = new NativeMenuItem("预览电量 HUD");
+        var previewItem = new NativeMenuItem(Localization.PreviewHud);
         previewItem.Click += (_, _) => _ = TriggerHudAsync();
         menu.Add(previewItem);
 
+        var settingsItem = new NativeMenuItem(Localization.Settings);
+        settingsItem.Click += (_, _) => OpenSettingsWindow();
+        menu.Add(settingsItem);
+
+        var updateItem = new NativeMenuItem(Localization.CheckUpdate);
+        updateItem.Click += async (_, _) =>
+        {
+            try
+            {
+                var (hasUpdate, version, url) = await UpdateChecker.CheckAsync();
+                if (hasUpdate && url is not null)
+                {
+                    var result = await MessageBox.Show(
+                        _hud ?? new HudWindow(),
+                        Localization.UpdateMsg(version ?? "?"),
+                        Localization.UpdateTitle,
+                        MessageBoxButton.OkCancel);
+
+                    if (result == MessageBoxResult.Ok)
+                        Platform.Start(url);
+                }
+                else
+                {
+                    _ = ShowAlertAsync(Localization.CheckUpdate, Localization.UpToDate);
+                }
+            }
+            catch
+            {
+                _ = ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
+            }
+        };
+        menu.Add(updateItem);
+
         menu.Add(new NativeMenuItemSeparator());
 
-        // 开机自启：勾选项，读写当前用户 Run 键
-        var autoStartItem = new NativeMenuItem("开机自启")
-        {
-            ToggleType = NativeMenuItemToggleType.CheckBox,
-            IsChecked = Services.AutoStart.IsEnabled(),
-        };
-        autoStartItem.Click += (_, _) =>
-        {
-            if (autoStartItem.IsChecked)
-                Services.AutoStart.Enable(Services.AutoStart.CurrentExePath);
-            else
-                Services.AutoStart.Disable();
-        };
-        menu.Add(autoStartItem);
+        var previewToolItem = new NativeMenuItem(Localization.PreviewTitle);
+        previewToolItem.Click += (_, _) => OpenPreviewWindow();
+        menu.Add(previewToolItem);
 
         menu.Add(new NativeMenuItemSeparator());
 
-        var exitItem = new NativeMenuItem("退出");
+        var exitItem = new NativeMenuItem(Localization.Exit);
         exitItem.Click += (_, _) => desktop.Shutdown();
         menu.Add(exitItem);
 
         _tray = new TrayIcon
         {
-            ToolTipText = "EndfieldCharge · 电量 HUD",
+            ToolTipText = Localization.TrayTooltip,
             Menu = menu,
             IsVisible = true,
         };
+
+        // 左键单击显示自定义菜单
+        _tray.Clicked += OnTrayClicked;
 
         try
         {
@@ -193,11 +352,77 @@ public partial class App : Application
         }
         catch
         {
-            // 图标加载失败也不影响功能，托盘仍可点击
         }
 
         var icons = new TrayIcons { _tray };
         TrayIcon.SetIcons(this, icons);
+    }
+
+    private void OnTrayClicked(object? sender, EventArgs e)
+    {
+        // 关闭已打开的菜单
+        if (_trayMenu is not null && _trayMenu.IsVisible)
+        {
+            _trayMenu.Close();
+            _trayMenu = null;
+            return;
+        }
+
+        _trayMenu = new TrayMenuWindow();
+        _trayMenu.PreviewClicked += () => { _trayMenu.Close(); _ = TriggerHudAsync(); };
+        _trayMenu.SettingsClicked += () => { _trayMenu.Close(); OpenSettingsWindow(); };
+        _trayMenu.CheckUpdateClicked += async () =>
+        {
+            _trayMenu.Close();
+            _trayMenu = null;
+            try
+            {
+                var (hasUpdate, version, url) = await UpdateChecker.CheckAsync();
+                if (hasUpdate && url is not null)
+                {
+                    var result = await MessageBox.Show(
+                        _hud ?? new HudWindow(),
+                        Localization.UpdateMsg(version ?? "?"),
+                        Localization.UpdateTitle,
+                        MessageBoxButton.OkCancel);
+
+                    if (result == MessageBoxResult.Ok)
+                        Platform.Start(url);
+                }
+                else
+                {
+                    await ShowAlertAsync(Localization.CheckUpdate, Localization.UpToDate);
+                }
+            }
+            catch
+            {
+                await ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
+            }
+        };
+        _trayMenu.PreviewToolClicked += () => { _trayMenu.Close(); OpenPreviewWindow(); };
+        _trayMenu.ExitClicked += () => { _trayMenu.Close(); _desktop?.Shutdown(); };
+
+        // 刷新本地化文字
+        _trayMenu.MenuPreviewText.Text = Localization.PreviewHud;
+        _trayMenu.MenuSettingsText.Text = Localization.Settings;
+        _trayMenu.MenuCheckUpdateText.Text = Localization.CheckUpdate;
+        _trayMenu.MenuPreviewToolText.Text = Localization.PreviewTitle;
+        _trayMenu.MenuExitText.Text = Localization.Exit;
+
+        _trayMenu.ShowAtTray();
+    }
+
+    private void OpenSettingsWindow()
+    {
+        var win = new SettingsWindow(_settings);
+        win.Show();
+    }
+
+    private void OpenPreviewWindow()
+    {
+        if (_hud is null) return;
+        var win = new Views.PreviewWindow(_hud);
+        win.Show();
     }
 
     // ---------------- 收尾 ----------------

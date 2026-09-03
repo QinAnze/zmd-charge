@@ -6,7 +6,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- SettingsWindow/PreviewWindow 只在代码中带参构造，XAML 运行时加载器警告为误报 -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\tray_bolt.ico</ApplicationIcon>
     <AssemblyName>EndfieldCharge</AssemblyName>
     <RootNamespace>EndfieldCharge</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>

@@ -4,8 +4,8 @@
 
 #define MyAppName "EndfieldCharge"
 #define MyAppVersion "0.0.0"
-#define MyAppPublisher "QinAnze"
-#define MyAppURL "https://github.com/QinAnze/zmd-charge"
+#define MyAppPublisher "Lenkmat"
+#define MyAppURL "https://github.com/Lenkmat/endfield-charge"
 #define MyAppExeName "EndfieldCharge.exe"
 
 [Setup]
@@ -29,6 +29,10 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
+; 安装器与卸载器图标（卸载项在「应用和功能」里显示同一图标）
+SetupIconFile=..\Assets\tray_bolt.ico
+; 「应用和功能」中的显示图标指向主程序，保持与桌面快捷方式一致
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 默认当前用户安装（不强制管理员），用户可在安装时选择提升权限
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog

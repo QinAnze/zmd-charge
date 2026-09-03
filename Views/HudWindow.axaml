@@ -47,7 +47,7 @@
 
       <!-- ========== 胶囊：固定 560×60 ==========
            PillAppear 让胶囊在电标弹入后 0.14→0.20 之间从中心弹出（scale 0.6→1, op 0→1）。
-           内嵌 RippleHost；Pill 的 ClipToBounds + CornerRadius 把扩散环裁到圆角矩形内。 -->
+           RippleHost 在胶囊内部，Pill 的 ClipToBounds + CornerRadius 做圆角裁剪。 -->
       <Border x:Name="Pill"
               Width="560" Height="60"
               CornerRadius="30"
@@ -60,14 +60,12 @@
           <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
         </Border.RenderTransform>
 
-        <!-- RippleHost：跟随电标 TX 移动；ClipToBounds 再次裁剪（双保险）。
-             环用大圆 + 大 scale，最终只显示 Pill 内部部分。
-             每个波纹包一层 Host：Host 的 TranslateY 由 RippleRise 动画驱动
+        <!-- RippleHost：在 Pill 内部，但无 Width/Height/ClipToBounds，
+             仅由 Pill 的 ClipToBounds + CornerRadius 做圆角裁剪。
+             Host 的 TranslateY 由 RippleRise 动画驱动
              （16px 电标正下方 → 0 对齐电标圆心），波纹自身 scale 从 0 扩散。 -->
         <Grid x:Name="RippleHost"
-              Width="560" Height="60"
               HorizontalAlignment="Center" VerticalAlignment="Center"
-              ClipToBounds="True"
               IsHitTestVisible="False">
           <Grid.RenderTransform>
             <TranslateTransform X="0"/>
@@ -77,7 +75,6 @@
             <Grid.RenderTransform>
               <TranslateTransform Y="16"/>
             </Grid.RenderTransform>
-            <!-- 内圈：实心灰圆（不做环），扩散成扩大的圆盘 -->
             <Ellipse x:Name="RippleInner"
                      Width="160" Height="160"
                      Fill="#FF656363"
@@ -94,7 +91,7 @@
             </Grid.RenderTransform>
             <Ellipse x:Name="RippleMid"
                      Width="220" Height="220"
-                     Stroke="#FF656363" StrokeThickness="1.5"
+                     Stroke="#FF656363" StrokeThickness="5.0"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      Opacity="0" RenderTransformOrigin="50%,50%">
               <Ellipse.RenderTransform>
@@ -108,7 +105,7 @@
             </Grid.RenderTransform>
             <Ellipse x:Name="RippleOuter"
                      Width="280" Height="280"
-                     Stroke="#FF656363" StrokeThickness="1.2"
+                     Stroke="#FF656363" StrokeThickness="3.5"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      Opacity="0" RenderTransformOrigin="50%,50%">
               <Ellipse.RenderTransform>
@@ -163,7 +160,8 @@
         <StackPanel.RenderTransform>
           <TranslateTransform X="0"/>
         </StackPanel.RenderTransform>
-        <TextBlock Text="/// SUPER CHARGE MODE"
+        <TextBlock x:Name="TagLineText"
+                   Text="/// SUPER CHARGE MODE"
                    FontFamily="{DynamicResource Hud.FontFamily}"
                    FontSize="9" FontWeight="Medium"
                    LetterSpacing="2"
@@ -212,8 +210,7 @@
                      FontFamily="{DynamicResource Hud.FontFamily}"
                      FontSize="14" FontWeight="Medium"
                      Foreground="White" Opacity="0.55"
-                     VerticalAlignment="Bottom"
-                     Margin="0,0,0,2"/>
+                     VerticalAlignment="Center"/>
         </StackPanel>
 
         <StackPanel Grid.Column="5" Orientation="Horizontal"
@@ -227,8 +224,7 @@
                      FontFamily="{DynamicResource Hud.FontFamily}"
                      FontSize="13" FontWeight="Medium"
                      Foreground="White" Opacity="0.55"
-                     VerticalAlignment="Bottom"
-                     Margin="2,0,0,2"/>
+                     VerticalAlignment="Center"/>
         </StackPanel>
 
         <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住
@@ -266,6 +262,16 @@
       </Grid>
 
     </Grid>
-    </Grid>
-  </Grid>
-</Window>
+	    </Grid>
+
+	    <!-- FPS 调试计数器（仅 show-fps 参数时可见） -->
+	    <TextBlock x:Name="FpsText"
+	               HorizontalAlignment="Right" VerticalAlignment="Bottom"
+	               FontFamily="{DynamicResource Hud.FontFamily}"
+	               FontSize="9" FontWeight="Medium"
+	               Foreground="#C6CA4C" Opacity="0.6"
+	               Margin="0,0,4,2"
+	               IsVisible="False"
+	               Text="-- FPS"/>
+	  </Grid>
+	</Window>

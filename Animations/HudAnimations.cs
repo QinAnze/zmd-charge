@@ -15,12 +15,14 @@ namespace EndfieldCharge.Animations;
 ///   0.09-0.12  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形）
 ///   0.12-0.20  电标从中间平滑滑到左侧 B 位（0.48s，easeInOutCubic，无过冲）；
 ///               RippleHost 用同一条曲线同步跟随，三圈波纹同时从 0 扩散
-///   0.20-0.25  「/// SUPER CHARGE MODE + 超充模式」居中淡入（等电标停稳再出）
+///   0.20-0.25  「/// SUPER CHARGE MODE + 超充模式」居中淡入
 ///   0.25-0.30  状态 B 短停
 ///   0.30-0.36  B→C：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
-///               电标从 B 位滑到贴左 C 位，数字内容淡入
-///   0.36-0.86  状态 C 停留（拉长，让电量信息是重点）
-///   0.86-0.89  整体缩小
+///               电标从 B 位滑到贴左 C 位
+///   0.36-0.38  状态 C 停留，胶囊已收窄，电量数字短暂隐藏
+///   0.38-0.42  电量数字与百分比淡入（等 C 态稳定后约 0.1s 再出）
+///   0.42-0.86  完整状态 C 展示
+///   0.86-0.89  整体缩小退出
 ///
 /// 横向长度 560 全程恒定；高度：A(60) → B(90) → C(60)。
 /// 注意：KeyFrame 的 Cue 必须严格递增（乱序会让某一段被压缩到 30ms，位移看起来像瞬移）。
@@ -40,6 +42,9 @@ internal static class HudAnimations
     private const double TContract = 0.36;  // B→C 收窄完成
     private const double THoldC = 0.86;
     private const double TClose = 0.89;
+
+    private const double TNumIn = 0.38;     // 电量数字开始淡入（等 C 态稳定后约 0.1s）
+    private const double TNumReady = 0.42;  // 电量数字淡入完成
 
     private const double PillRadiusA = 30d;
     private const double PillRadiusB = 18d;
@@ -71,9 +76,7 @@ internal static class HudAnimations
 
     /// <summary>
     /// 胶囊背景弹出：scale 0.6→1, op 0→1。
-    /// 用 KS_Out（不再用 BackOut）—— BackOut 的过冲会缩放到 1.1+ 再回落，
-    /// 与 PillCorner 的 CornerRadius 插值在同一帧同时作用时偶发渲染异常（背景闪透明），
-    /// 改 KS_Out 后稳定。
+    /// 用 KS_BackOut 带回弹效果，胶囊弹出时先略微过冲再回落，视觉张力更强。
     /// </summary>
     public static Animation PillAppear()
     {
@@ -81,7 +84,7 @@ internal static class HudAnimations
         a.Children.Add(KF(0d, null, Op(0), SX(0.6), SY(0.6)));
         a.Children.Add(KF(TStart, KS_In, Op(0), SX(0.6), SY(0.6)));
         a.Children.Add(KF(TAppear, KS_In, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(TPillOut, KS_Out, Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(TPillOut, KS_BackOut, Op(1), SX(1d), SY(1d)));
         a.Children.Add(KF(THoldC, KS_In, Op(1), SX(1d), SY(1d)));
         return a;
     }
@@ -185,13 +188,15 @@ internal static class HudAnimations
         return a;
     }
 
-    /// <summary>数字态：B→C 交叉淡化时浮现。</summary>
+    /// <summary>数字态：等 C 态完全稳定（胶囊收窄、电标到位）之后才淡入。</summary>
     public static Animation NumHost()
     {
         var a = New();
         a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(THoldB, KS_In, Op(0)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(1)));
+        a.Children.Add(KF(TContract, KS_In, Op(0)));       // 0.36 → C 态已就绪，隐藏
+        a.Children.Add(KF(TNumIn, KS_In, Op(0)));           // 0.50 → 保持隐藏
+        a.Children.Add(KF(TNumReady, KS_Out, Op(1)));       // 0.56 → 淡入完成
+        a.Children.Add(KF(THoldC, KS_In, Op(1)));
         return a;
     }
 
@@ -247,7 +252,7 @@ internal static class HudAnimations
 
     /// <summary>
     /// 内容淡入（电标方块 + 数字 + 徽章）：等胶囊完全弹出（TSimpleAppear）后，
-    /// 在 0.05→0.08 之间快速显现（0.03 单位 = 0.15s）。
+    /// 在 0.05→0.08 之间快速显现。
     /// </summary>
     public static Animation SimpleFadeIn()
     {

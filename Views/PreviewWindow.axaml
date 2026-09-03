@@ -1,0 +1,106 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="420" d:DesignHeight="460"
+        x:Class="EndfieldCharge.Views.PreviewWindow"
+        Title="EndfieldCharge · 动画预览"
+        Width="420" Height="460"
+        MinWidth="360" MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        Background="#1A1A1C"
+        Foreground="#E8E8E8"
+        FontFamily="HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- 标题栏 -->
+    <Border Grid.Row="0" Height="48" Background="#202022" Padding="20,0">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Border Width="18" Height="18" CornerRadius="4.5" Background="#C6CA4C" VerticalAlignment="Center" ClipToBounds="True">
+            <Image Width="14" Height="14" Source="avares://EndfieldCharge/Assets/tray_bolt.png"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <TextBlock x:Name="WinTitle" Text="动画预览"
+                     FontSize="16" FontWeight="SemiBold"
+                     VerticalAlignment="Center" Foreground="#F0F0F0"/>
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="EndfieldCharge" FontSize="11"
+                   Foreground="#888888" VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+
+    <!-- 内容 -->
+    <ScrollViewer Grid.Row="1" Margin="20,16,20,8">
+      <Border Background="#262628" CornerRadius="10" Padding="16,14">
+        <StackPanel Spacing="16">
+          <TextBlock Text="动画参数" FontSize="13" FontWeight="SemiBold"
+                     Foreground="#C6CA4C" LetterSpacing="1"/>
+
+          <StackPanel Spacing="5">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="LabelScale" Text="胶囊缩放" FontSize="12" Foreground="#888888"/>
+              <TextBlock x:Name="PillScaleValue" Grid.Column="1" Text="0.80" FontSize="12"
+                         Foreground="#888888" Width="40" TextAlignment="Right"/>
+            </Grid>
+            <Slider x:Name="PillScaleSlider" Minimum="0.4" Maximum="1.2" TickFrequency="0.05" Value="0.8"/>
+          </StackPanel>
+
+          <StackPanel Spacing="5">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="LabelDuration" Text="总时长" FontSize="12" Foreground="#888888"/>
+              <TextBlock x:Name="DurationValue" Grid.Column="1" Text="6.0s" FontSize="12"
+                         Foreground="#888888" Width="40" TextAlignment="Right"/>
+            </Grid>
+            <Slider x:Name="DurationSlider" Minimum="3" Maximum="10" TickFrequency="0.5" Value="6"/>
+          </StackPanel>
+
+          <StackPanel Spacing="5">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="LabelBounce" Text="回弹强度" FontSize="12" Foreground="#888888"/>
+              <TextBlock x:Name="BounceValue" Grid.Column="1" Text="0.175" FontSize="12"
+                         Foreground="#888888" Width="40" TextAlignment="Right"/>
+            </Grid>
+            <Slider x:Name="BounceSlider" Minimum="0.0" Maximum="0.5" TickFrequency="0.05" Value="0.175"/>
+          </StackPanel>
+
+          <StackPanel Spacing="5">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock x:Name="LabelHold" Text="状态 C 停留占比" FontSize="12" Foreground="#888888"/>
+              <TextBlock x:Name="HoldValue" Grid.Column="1" Text="0.50" FontSize="12"
+                         Foreground="#888888" Width="40" TextAlignment="Right"/>
+            </Grid>
+            <Slider x:Name="HoldSlider" Minimum="0.3" Maximum="0.75" TickFrequency="0.05" Value="0.50"/>
+          </StackPanel>
+
+          <Border Height="1" Background="#2A2A2C"/>
+
+          <StackPanel Spacing="5">
+            <TextBlock x:Name="LabelMode" Text="播放模式" FontSize="12" Foreground="#888888"/>
+            <ComboBox x:Name="ModeCombo" SelectedIndex="0" Height="32">
+              <ComboBoxItem Tag="plug">插电（完整三态）</ComboBoxItem>
+              <ComboBoxItem Tag="unplug">拔电（简化胶囊）</ComboBoxItem>
+            </ComboBox>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </ScrollViewer>
+
+    <!-- 底部按钮 -->
+    <Border Grid.Row="2" Height="56" Background="#202022" Padding="20,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" VerticalAlignment="Center">
+        <Button x:Name="CloseBtn" Content="关闭" Height="34" Width="90"
+                Background="#2A2A2D" Foreground="#E0E0E0"
+                BorderThickness="1" BorderBrush="#3A3A3C"
+                CornerRadius="8" Cursor="Hand"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+        <Button x:Name="PlayBtn" Content="播放" Height="34" Width="110"
+                Background="#C6CA4C" Foreground="#1A1A1C"
+                FontWeight="SemiBold" FontSize="13"
+                CornerRadius="8" Cursor="Hand"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

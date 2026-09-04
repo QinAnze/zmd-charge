@@ -28,6 +28,8 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1" />
     <!-- WMI（电池兜底、设备类型 PCSystemType） -->
     <PackageReference Include="System.Management" Version="10.0.11" />
+    <!-- C 盘所在物理盘的读写速度：PhysicalDisk 性能计数器（实例名自带盘符映射） -->
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" />
     <!--
       硬件传感器：LibreHardwareMonitorLib（MIT，AIDA64 / HWiNFO 同源的开源实现）。
       CPU / 内存 / GPU 占用率与 CPU 封装、GPU 实时功率全部读真实传感器，不做估算。

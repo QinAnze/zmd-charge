@@ -188,7 +188,7 @@ public partial class App : Application
             GpuPercent: 8d,
             LoadPercent: SystemLoadService.ComputeLoad(12d, 40d, 8d),
             Watts: 68.4d,
-            DiskPercent: 3d,
+            DiskMBs: 0.4d,
             NetUpKBs: 12d,
             NetDownKBs: 340d);
 

@@ -309,7 +309,10 @@ public partial class HudWindow : Window
         _cts?.Cancel();
         Root.Opacity = 1;
         ShowFullyExpandedStatic();
-        NumHost.Opacity = 0;          // 电量内容让位
+
+        // 电标换性能图标；电量内容渐隐让位
+        SquareBoltIcon.IsVisible = false;
+        SquarePerfIcon.IsVisible = true;
 
         PerfPanel.IsVisible = true;
         UpdatePerfPanel();
@@ -319,12 +322,14 @@ public partial class HudWindow : Window
         {
             await Task.WhenAll(
                 HudAnimations.PanelExpand().RunAsync(Pill),
-                HudAnimations.PanelFadeIn().RunAsync(PerfPanel));
+                HudAnimations.PanelFadeIn().RunAsync(PerfPanel),
+                HudAnimations.NumFadeOut().RunAsync(NumHost));
         }
         catch (OperationCanceledException)
         {
             // 被新一轮播放打断，状态交由后续流程接管
         }
+        NumHost.Opacity = 0;   // FillMode.Forward 收尾，保证干净
         _panelBusy = false;
     }
 
@@ -334,13 +339,17 @@ public partial class HudWindow : Window
         _panelBusy = true;
         _panelOpen = false;
         StopPanelTimer();
-        NumHost.Opacity = 1;          // 电量内容先回来
+
+        // 电标换回闪电；电量内容随收缩渐显
+        SquareBoltIcon.IsVisible = true;
+        SquarePerfIcon.IsVisible = false;
 
         try
         {
             await Task.WhenAll(
                 HudAnimations.PanelContract().RunAsync(Pill),
-                HudAnimations.PanelFadeOut().RunAsync(PerfPanel));
+                HudAnimations.PanelFadeOut().RunAsync(PerfPanel),
+                HudAnimations.NumFadeIn().RunAsync(NumHost));
         }
         catch (OperationCanceledException)
         {
@@ -348,6 +357,7 @@ public partial class HudWindow : Window
         }
 
         PerfPanel.IsVisible = false;
+        NumHost.Opacity = 1;   // FillMode.Forward 收尾
         _panelBusy = false;
 
         if (!_resident)
@@ -362,6 +372,8 @@ public partial class HudWindow : Window
         StopPanelTimer();
         PerfPanel.IsVisible = false;
         PerfPanel.Opacity = 1;        // 抵消 FadeOut 的 FillMode.Forward 残留
+        SquareBoltIcon.IsVisible = true;
+        SquarePerfIcon.IsVisible = false;
     }
 
     private void StartPanelTimer()
@@ -387,13 +399,16 @@ public partial class HudWindow : Window
         PerfCpu.Text = $"{s.CpuPercent:F0} %";
         PerfGpu.Text = s.GpuPercent is { } gpu ? $"{gpu:F0} %" : "--";
         PerfMem.Text = $"{s.MemoryPercent:F0} %";
-        PerfDisk.Text = s.DiskPercent is { } disk ? $"{disk:F0} %" : "--";
+        PerfDisk.Text = s.DiskMBs is { } mbs ? FormatDiskSpeed(mbs) : "--";
         PerfUp.Text = FormatSpeed(s.NetUpKBs);
         PerfDown.Text = FormatSpeed(s.NetDownKBs);
     }
 
     private static string FormatSpeed(double kbs) =>
         kbs >= 1024d ? $"{kbs / 1024d:F1} MB/s" : $"{kbs:F0} KB/s";
+
+    private static string FormatDiskSpeed(double mbs) =>
+        mbs >= 1024d ? $"{mbs / 1024d:F2} GB/s" : $"{mbs:F1} MB/s";
 
     // ---------------- 数据绑定（直接赋值，无 MVVM 开销） ----------------
 

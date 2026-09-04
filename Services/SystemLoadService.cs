@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -15,7 +16,7 @@ public sealed record SystemLoadSnapshot(
     double? GpuPercent,
     double LoadPercent,
     double? Watts,
-    double? DiskPercent,
+    double? DiskMBs,
     double NetUpKBs,
     double NetDownKBs)
 {
@@ -51,6 +52,7 @@ public sealed class SystemLoadService : IDisposable
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1.5);
 
     private readonly HardwareMonitor _hw = new();
+    private readonly DiskProbe _disk = new();
     private readonly object _gate = new();
     private SystemLoadSnapshot _current = SystemLoadSnapshot.Empty;
     private Timer? _timer;
@@ -60,6 +62,7 @@ public sealed class SystemLoadService : IDisposable
     {
         // 后台初始化传感器树（首次加载驱动较慢），不阻塞启动与首次弹窗
         _hw.OpenInBackground();
+        _disk.StartInBackground();
 
         _timer = new Timer(_ => Tick(), null, SampleInterval, SampleInterval);
     }
@@ -101,7 +104,7 @@ public sealed class SystemLoadService : IDisposable
             GpuPercent: gpu,
             LoadPercent: ComputeLoad(cpu, mem, gpu),
             Watts: watts,
-            DiskPercent: s.DiskLoad is null ? null : Math.Clamp(s.DiskLoad.Value, 0d, 100d),
+            DiskMBs: _disk.ReadMBs(),
             NetUpKBs: upKBs,
             NetDownKBs: downKBs);
 
@@ -110,6 +113,71 @@ public sealed class SystemLoadService : IDisposable
             _current = snap;
         }
         return snap;
+    }
+
+    // ---------------- 硬盘速度（C 盘所在物理盘，PhysicalDisk 性能计数器） ----------------
+
+    /// <summary>
+    /// 读 <b>C 盘所在物理盘</b>的读写速度（MB/s，读 + 写）。
+    /// PhysicalDisk 性能计数器的实例名自带盘符映射（如 "0 C:" 或 "0 C: D:"），
+    /// 这是 Windows 标准、且唯一可靠的"盘符 → 物理盘"对应方式。
+    /// 首次枚举实例较慢，放后台；读不到（权限 / 实例缺失）返回 null。
+    /// </summary>
+    private sealed class DiskProbe
+    {
+        private const double BytesPerMB = 1024d * 1024d;
+
+        private PerformanceCounter? _read;
+        private PerformanceCounter? _write;
+        private volatile bool _ready;
+        private int _failures;
+
+        public void StartInBackground()
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    string? instance = new PerformanceCounterCategory("PhysicalDisk")
+                        .GetInstanceNames()
+                        .FirstOrDefault(n => n.Contains("C:", StringComparison.OrdinalIgnoreCase));
+
+                    if (instance is null)
+                        return;
+
+                    _read = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", instance, readOnly: true);
+                    _write = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", instance, readOnly: true);
+
+                    // 速率型计数器首读返回 0，预热一次
+                    _read.NextValue();
+                    _write.NextValue();
+                    _ready = true;
+                }
+                catch
+                {
+                    // 计数器不可用：面板上硬盘显示 "--"
+                }
+            });
+        }
+
+        public double? ReadMBs()
+        {
+            if (!_ready)
+                return null;
+
+            try
+            {
+                double mbs = (_read!.NextValue() + _write!.NextValue()) / BytesPerMB;
+                _failures = 0;
+                return mbs;
+            }
+            catch
+            {
+                if (++_failures >= 3)
+                    _ready = false;   // 连续失败放弃，不再反复抛
+                return null;
+            }
+        }
     }
 
     // ---------------- 网络速率（.NET 标准 NetworkInterface 统计差分） ----------------

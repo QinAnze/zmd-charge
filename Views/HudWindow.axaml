@@ -140,16 +140,25 @@
                     Foreground="#FF141313"/>
         </Grid>
 
-        <!-- 方形态：状态 C（18×18 圆角方块，在 32×32 容器内居中，logo 12） -->
+        <!-- 方形态：状态 C / 性能面板（18×18 圆角方块在 32×32 容器内居中；
+             面板打开时闪电换成性能芯片图标） -->
         <Grid x:Name="SquareForm" Opacity="0">
           <Border Width="18" Height="18"
                   CornerRadius="4.5"
                   Background="#FFE9E7E4"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center">
-            <PathIcon Width="12" Height="12"
-                      Data="{DynamicResource Geo.Bolt}"
-                      Foreground="#FF141313"/>
+            <Panel>
+              <PathIcon x:Name="SquareBoltIcon"
+                        Width="12" Height="12"
+                        Data="{DynamicResource Geo.Bolt}"
+                        Foreground="#FF141313"/>
+              <PathIcon x:Name="SquarePerfIcon"
+                        Width="11" Height="11"
+                        Data="{DynamicResource Geo.ChipPins}"
+                        Foreground="#FF141313"
+                        IsVisible="False"/>
+            </Panel>
           </Border>
         </Grid>
       </Grid>
@@ -311,66 +320,66 @@
           <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfCpu" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="CPU"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
 
           <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfGpu" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="GPU"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
 
           <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfMem" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="内存"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
 
           <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfDisk" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="硬盘"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
 
           <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfUp" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="上传"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
 
           <StackPanel Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock x:Name="PerfDown" Text="--"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="13" FontWeight="SemiBold"
+                       FontSize="17" FontWeight="SemiBold"
                        Foreground="White" HorizontalAlignment="Center"/>
             <TextBlock Text="下载"
                        FontFamily="{DynamicResource Hud.FontFamily}"
-                       FontSize="9" FontWeight="Medium" LetterSpacing="1"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
                        Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
           </StackPanel>
         </Grid>

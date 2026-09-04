@@ -278,7 +278,7 @@ internal static class HudAnimations
     // ---------------- 性能面板（点击圆胶囊 ⇄ 圆角矩形） ----------------
     // 形变规格与三态 A→B / B→C 完全一致：横向 560 恒定，高 60↔90，圆角 30↔18，快速过渡。
 
-    public static readonly TimeSpan PanelMorph = TimeSpan.FromSeconds(0.36);
+    public static readonly TimeSpan PanelMorph = TimeSpan.FromSeconds(0.2);
 
     /// <summary>圆胶囊 → 圆角矩形：高 60→90、圆角 30→18。</summary>
     public static Animation PanelExpand()
@@ -303,18 +303,35 @@ internal static class HudAnimations
     {
         var a = NewPanel();
         a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(0.45d, KS_In, Op(0)));
+        a.Children.Add(KF(0.4d, KS_In, Op(0)));
         a.Children.Add(KF(1d, KS_Out, Op(1)));
         return a;
     }
 
-    /// <summary>面板内容淡出：先保持，随收缩一起淡出。</summary>
+    /// <summary>面板内容淡出：全程线性渐隐，不先停留。</summary>
     public static Animation PanelFadeOut()
     {
         var a = NewPanel();
         a.Children.Add(KF(0d, null, Op(1)));
-        a.Children.Add(KF(0.5d, KS_In, Op(1)));
         a.Children.Add(KF(1d, KS_Out, Op(0)));
+        return a;
+    }
+
+    /// <summary>电量内容淡出（打开面板时，渐隐让位）。</summary>
+    public static Animation NumFadeOut()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(1)));
+        a.Children.Add(KF(1d, KS_Out, Op(0)));
+        return a;
+    }
+
+    /// <summary>电量内容淡入（关闭面板时，随收缩渐显）。</summary>
+    public static Animation NumFadeIn()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(0)));
+        a.Children.Add(KF(1d, KS_Out, Op(1)));
         return a;
     }
 

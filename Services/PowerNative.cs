@@ -101,6 +101,64 @@ internal static class PowerNative
     /// <summary>GUID_BATTERY_PERCENTAGE_REMAINING：电量百分比变化。</summary>
     public static readonly Guid GuidBatteryPercentageRemaining = new("a7ad8041-b45a-4cae-87a3-eecbb468a9e1");
 
+    /// <summary>GUID_POWER_SAVING_STATUS：省电模式开/关（Win10 ~ 23H2）。Data: 1=开, 0=关。
+    /// 值来自 WinNT.h（E00958C0-C213-4ACE-AC77-FECCED2EEEA5），写错将永远收不到通知。</summary>
+    public static readonly Guid GuidPowerSavingStatus = new("e00958c0-c213-4ace-ac77-fecced2eeea5");
+
+    /// <summary>GUID_ENERGY_SAVER_STATUS：节能模式状态（24H2 / build 26100+ 取代省电模式）。
+    /// Data: 0=ENERGY_SAVER_OFF, 1=STANDARD, 2=HIGH_SAVINGS（非 0 即开启）。
+    /// 25H2 实测：快速设置开关节能模式时，只有此 GUID 推送通知，老的
+    /// GUID_POWER_SAVING_STATUS 与 SystemStatusFlag 均不再反映该开关。</summary>
+    public static readonly Guid GuidEnergySaverStatus = new("550e8400-e29b-41d4-a716-446655440000");
+
+    /// <summary>读取省电/节能模式当前是否开启。
+    /// 24H2+：节能模式状态在注册表 EnergySaverState（实测 1=开, 2=关）。
+    /// 旧系统：GetSystemPowerStatus.SystemStatusFlag（1=开）。</summary>
+    public static bool TryGetPowerSavingStatus(out bool enabled)
+    {
+        enabled = false;
+        try
+        {
+            if (Environment.OSVersion.Version.Build >= 26100)
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Control\Power");
+                if (key?.GetValue("EnergySaverState") is int v)
+                {
+                    enabled = v == 1;
+                    return true;
+                }
+            }
+
+            if (GetSystemPowerStatus(out var sps))
+            {
+                enabled = sps.SystemStatusFlag == 1;
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return false;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemPowerStatus
+    {
+        public byte AcLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        /// <summary>1 = 省电模式开启，0 = 关闭。</summary>
+        public byte SystemStatusFlag;
+        public uint BatteryLifeTime;
+        public uint BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemPowerStatus(out SystemPowerStatus lpSystemPowerStatus);
+
     public const int WmPowerBroadcast = 0x0218;
     public const int PbtPowerSettingChange = 0x8013;
     public const int PbtApmPowerStatusChange = 0x000A;

@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="EndfieldCharge.Views.TrayMenuWindow"
-        Width="220" Height="222"
+        Width="220" Height="173"
         ShowInTaskbar="False"
         Topmost="True"
         Background="Transparent"
@@ -9,7 +9,7 @@
         CanResize="False"
         Focusable="True">
 
-  <!-- 菜单容器：固定 220×222（5项×36 + 2分隔线 + padding + spacing），
+  <!-- 菜单容器：固定 220×173（4项×36 + 1分隔线 + padding + spacing），
        圆角 + 阴影，Padding 6 使内层 item 与外侧有小边距 -->
   <Border CornerRadius="10" Background="#1E1E20" Padding="6"
           BoxShadow="0 4 20 #40000000"
@@ -38,17 +38,6 @@
               Height="36" CornerRadius="6" Padding="12,0"
               Cursor="Hand" Background="Transparent">
         <TextBlock x:Name="MenuCheckUpdateText" Text="检查更新"
-                   FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
-      </Border>
-
-      <!-- 分隔线 -->
-      <Border Height="1" Background="#2A2A2C" Margin="8,4"/>
-
-      <!-- 预览动画 -->
-      <Border x:Name="MenuPreviewTool" Tag="preview-tool"
-              Height="36" CornerRadius="6" Padding="12,0"
-              Cursor="Hand" Background="Transparent">
-        <TextBlock x:Name="MenuPreviewToolText" Text="动画预览"
                    FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
       </Border>
 

@@ -43,6 +43,13 @@
               <TextBlock x:Name="TabGeneralText" Text="通用" FontSize="13"/>
             </Grid>
           </Border>
+          <Border x:Name="TabAnimationBtn" Tag="Animation"
+                  Height="38" CornerRadius="8" Padding="12,0"
+                  Background="Transparent" Cursor="Hand">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock x:Name="TabAnimationText" Text="动画" FontSize="13"/>
+            </Grid>
+          </Border>
           <Border x:Name="TabNotificationsBtn" Tag="Notifications"
                   Height="38" CornerRadius="8" Padding="12,0"
                   Background="Transparent" Cursor="Hand">
@@ -79,15 +86,6 @@
                     </Grid>
                     <Slider x:Name="ScaleSlider" Minimum="0.4" Maximum="1.2" TickFrequency="0.05"
                             Value="0.8" IsSnapToTickEnabled="False"/>
-                  </StackPanel>
-                  <StackPanel Spacing="5">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock x:Name="LabelDuration" Text="显示时长（秒）" FontSize="12" Foreground="#888888"/>
-                      <TextBlock x:Name="DurationValue" Grid.Column="1" Text="5.0" FontSize="12"
-                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
-                    </Grid>
-                    <Slider x:Name="DurationSlider" Minimum="2" Maximum="10" TickFrequency="0.5"
-                            Value="5" IsSnapToTickEnabled="False"/>
                   </StackPanel>
                 </StackPanel>
               </Border>
@@ -126,12 +124,88 @@
               </Border>
             </StackPanel>
 
+            <!-- 动画 Tab -->
+            <StackPanel x:Name="AnimationPanel" IsVisible="False" Spacing="0">
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionAnimParams" Text="动画参数" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelDuration" Text="显示时长（秒）" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="DurationValue" Grid.Column="1" Text="6.0s" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="DurationSlider" Minimum="3" Maximum="10" TickFrequency="0.5"
+                            Value="6" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelBounce" Text="回弹强度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="BounceValue" Grid.Column="1" Text="0.275" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="BounceSlider" Minimum="0" Maximum="0.5" TickFrequency="0.025"
+                            Value="0.275" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelRippleIntensity" Text="波纹强度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="RippleIntensityValue" Grid.Column="1" Text="1.00" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="RippleIntensitySlider" Minimum="0" Maximum="2" TickFrequency="0.05"
+                            Value="1" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelRippleSpread" Text="波纹幅度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="RippleSpreadValue" Grid.Column="1" Text="1.00" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="RippleSpreadSlider" Minimum="0.5" Maximum="1.5" TickFrequency="0.05"
+                            Value="1" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionPreview" Text="预览" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <StackPanel Spacing="5">
+                    <TextBlock x:Name="LabelPlayMode" Text="播放模式" FontSize="12" Foreground="#888888"/>
+                    <ComboBox x:Name="PreviewModeCombo" SelectedIndex="0" Height="32"/>
+                  </StackPanel>
+                  <Button x:Name="PreviewPlayBtn" Content="播放"
+                          Height="34" HorizontalAlignment="Stretch" Margin="0,4,0,0"
+                          Background="#C6CA4C" Foreground="#1A1A1C"
+                          FontWeight="SemiBold" FontSize="13"
+                          CornerRadius="8" Cursor="Hand"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
             <!-- 通知 Tab -->
             <StackPanel x:Name="NotificationsPanel" IsVisible="False" Spacing="0">
               <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
                 <StackPanel Spacing="18">
                   <TextBlock Text="提醒设置" FontSize="13" FontWeight="SemiBold"
                              Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock x:Name="LabelPowerSaverNotify" Text="省电模式切换提示" FontSize="13"/>
+                      <TextBlock x:Name="PowerSaverNotifyDesc" Text="开启 / 关闭系统省电模式时显示 HUD"
+                                 FontSize="11" Foreground="#888888"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="PowerSaverSwitch" IsChecked="True" Grid.Column="1"/>
+                  </Grid>
+                  <Border Height="1" Background="#2A2A2C"/>
                   <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Spacing="3">
                       <TextBlock x:Name="LabelLowBatteryEnable" Text="启用低电量提醒" FontSize="13"/>
@@ -182,6 +256,13 @@
                                FontWeight="SemiBold" Foreground="#F0F0F0"
                                VerticalAlignment="Center"/>
                   </StackPanel>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                    <TextBlock x:Name="LabelAuthor" Text="作者" FontSize="12"
+                               Foreground="#888888" VerticalAlignment="Center"/>
+                    <TextBlock Text="Lenkmat" FontSize="13"
+                               FontWeight="SemiBold" Foreground="#F0F0F0"
+                               VerticalAlignment="Center"/>
+                  </StackPanel>
                   <Border Height="1" Background="#2A2A2C" Margin="0,4"/>
                   <Button x:Name="CheckUpdateBtn" Content="检查更新"
                           Height="34" HorizontalAlignment="Stretch" Margin="0,4,0,0"
@@ -190,6 +271,24 @@
                           CornerRadius="8"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
                   <TextBlock x:Name="UpdateStatusText" FontSize="11"
+                             Foreground="#888888" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </Border>
+
+              <!-- 字体安装 -->
+              <Border Background="#262628" CornerRadius="10" Padding="20,16" Margin="0,0,0,14">
+                <StackPanel Spacing="12">
+                  <TextBlock Text="字体" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <TextBlock x:Name="FontDescText" Text="HUD 数字与英文字体使用 Inter Medium，可获得更清晰的渲染效果"
+                             FontSize="12" Foreground="#888888" TextWrapping="Wrap"/>
+                  <Button x:Name="FontInstallBtn" Content="安装 Inter 字体"
+                          Height="34" HorizontalAlignment="Stretch"
+                          Background="#2A2A2D" Foreground="#E0E0E0"
+                          BorderThickness="1" BorderBrush="#3A3A3C"
+                          CornerRadius="8"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                  <TextBlock x:Name="FontStatusText" FontSize="11"
                              Foreground="#888888" HorizontalAlignment="Center"/>
                 </StackPanel>
               </Border>

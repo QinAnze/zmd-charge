@@ -38,4 +38,7 @@
   <!-- ==== 无衬线字体族（Inter 优先，中文回退到系统黑体，均无描边） ==== -->
   <FontFamily x:Key="Hud.FontFamily">"HarmonyOS Sans SC", "HarmonyOS Sans", Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif</FontFamily>
 
+  <!-- ==== 数字 / 英文字体：Inter Medium，中文回退到系统黑体 ==== -->
+  <FontFamily x:Key="Hud.FontFamilyNumeric">"Inter Medium", "HarmonyOS Sans SC Medium", "HarmonyOS Sans Medium", Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif</FontFamily>
+
 </ResourceDictionary>

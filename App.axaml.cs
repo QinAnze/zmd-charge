@@ -57,7 +57,7 @@ public partial class App : Application
         _hud = new HudWindow();
         _hud.ApplySettings(_settings);
 
-        SetupTrayIcon(desktop);
+        SetupTrayIcon();
         StartPowerWatching();
 
         // 调试命令行参数
@@ -138,7 +138,30 @@ public partial class App : Application
             });
         };
 
+        // 省电模式开关：开启 → 完整三态（省电文案）；关闭 → 简化电量胶囊
+        _watcher.PowerSavingChanged += (_, enabled) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!_settings.EnablePowerSaverNotify)
+                    return;
+
+                if (enabled)
+                    _ = TriggerSaverHudAsync();
+                else
+                    _ = TriggerSimpleHudAsync();
+            });
+        };
+
         _watcher.Start();
+    }
+
+    private async Task TriggerSaverHudAsync()
+    {
+        if (_hud is null) return;
+
+        var snapshot = await Task.Run(() => BatteryService.GetSnapshot());
+        await _hud.ShowAndPlayAsync(snapshot, acOnline: true, HudPlayMode.PowerSaver);
     }
 
     private async Task TriggerSimpleHudAsync()
@@ -280,68 +303,16 @@ public partial class App : Application
 
     // ---------------- 托盘 ----------------
 
-    private void SetupTrayIcon(IClassicDesktopStyleApplicationLifetime desktop)
+    private void SetupTrayIcon()
     {
-        // 原生菜单（右击兜底）：保留完整功能
-        var menu = new NativeMenu();
-
-        var previewItem = new NativeMenuItem(Localization.PreviewHud);
-        previewItem.Click += (_, _) => _ = TriggerHudAsync();
-        menu.Add(previewItem);
-
-        var settingsItem = new NativeMenuItem(Localization.Settings);
-        settingsItem.Click += (_, _) => OpenSettingsWindow();
-        menu.Add(settingsItem);
-
-        var updateItem = new NativeMenuItem(Localization.CheckUpdate);
-        updateItem.Click += async (_, _) =>
-        {
-            try
-            {
-                var (hasUpdate, version, url) = await UpdateChecker.CheckAsync();
-                if (hasUpdate && url is not null)
-                {
-                    var result = await MessageBox.Show(
-                        _hud ?? new HudWindow(),
-                        Localization.UpdateMsg(version ?? "?"),
-                        Localization.UpdateTitle,
-                        MessageBoxButton.OkCancel);
-
-                    if (result == MessageBoxResult.Ok)
-                        Platform.Start(url);
-                }
-                else
-                {
-                    _ = ShowAlertAsync(Localization.CheckUpdate, Localization.UpToDate);
-                }
-            }
-            catch
-            {
-                _ = ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
-            }
-        };
-        menu.Add(updateItem);
-
-        menu.Add(new NativeMenuItemSeparator());
-
-        var previewToolItem = new NativeMenuItem(Localization.PreviewTitle);
-        previewToolItem.Click += (_, _) => OpenPreviewWindow();
-        menu.Add(previewToolItem);
-
-        menu.Add(new NativeMenuItemSeparator());
-
-        var exitItem = new NativeMenuItem(Localization.Exit);
-        exitItem.Click += (_, _) => desktop.Shutdown();
-        menu.Add(exitItem);
-
+        // 自定义菜单（TrayMenuWindow）：左键托盘弹出。
+        // 不设原生 Menu——11.2 中右键仅在 Menu 非空时弹原生菜单，置空后右键无动作。
         _tray = new TrayIcon
         {
             ToolTipText = Localization.TrayTooltip,
-            Menu = menu,
             IsVisible = true,
         };
 
-        // 左键单击显示自定义菜单
         _tray.Clicked += OnTrayClicked;
 
         try
@@ -399,29 +370,21 @@ public partial class App : Application
                 await ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
             }
         };
-        _trayMenu.PreviewToolClicked += () => { _trayMenu.Close(); OpenPreviewWindow(); };
         _trayMenu.ExitClicked += () => { _trayMenu.Close(); _desktop?.Shutdown(); };
 
         // 刷新本地化文字
         _trayMenu.MenuPreviewText.Text = Localization.PreviewHud;
         _trayMenu.MenuSettingsText.Text = Localization.Settings;
         _trayMenu.MenuCheckUpdateText.Text = Localization.CheckUpdate;
-        _trayMenu.MenuPreviewToolText.Text = Localization.PreviewTitle;
         _trayMenu.MenuExitText.Text = Localization.Exit;
 
         _trayMenu.ShowAtTray();
     }
 
-    private void OpenSettingsWindow()
+    private void OpenSettingsWindow(string initialTab = "General")
     {
-        var win = new SettingsWindow(_settings);
-        win.Show();
-    }
-
-    private void OpenPreviewWindow()
-    {
-        if (_hud is null) return;
-        var win = new Views.PreviewWindow(_hud);
+        // _hud 在 OnFrameworkInitializationCompleted 中先于托盘创建，此处必非空
+        var win = new SettingsWindow(_settings, _hud!, initialTab);
         win.Show();
     }
 

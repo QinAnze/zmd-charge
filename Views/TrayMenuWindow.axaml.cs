@@ -15,7 +15,6 @@ public partial class TrayMenuWindow : Window
     public event Action? PreviewClicked;
     public event Action? SettingsClicked;
     public event Action? CheckUpdateClicked;
-    public event Action? PreviewToolClicked;
     public event Action? ExitClicked;
 
     public TrayMenuWindow()
@@ -37,7 +36,6 @@ public partial class TrayMenuWindow : Window
         SetupMenuItem(MenuPreview, MenuPreviewText, () => PreviewClicked?.Invoke());
         SetupMenuItem(MenuSettings, MenuSettingsText, () => SettingsClicked?.Invoke());
         SetupMenuItem(MenuCheckUpdate, MenuCheckUpdateText, () => CheckUpdateClicked?.Invoke());
-        SetupMenuItem(MenuPreviewTool, MenuPreviewToolText, () => PreviewToolClicked?.Invoke());
         SetupMenuItem(MenuExit, MenuExitText, () => ExitClicked?.Invoke());
     }
 

@@ -162,7 +162,7 @@
         </StackPanel.RenderTransform>
         <TextBlock x:Name="TagLineText"
                    Text="/// SUPER CHARGE MODE"
-                   FontFamily="{DynamicResource Hud.FontFamily}"
+                   FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
                    FontSize="9" FontWeight="Medium"
                    LetterSpacing="2"
                    HorizontalAlignment="Center"
@@ -187,9 +187,9 @@
           <TranslateTransform X="0"/>
         </Grid.RenderTransform>
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="26"/>    <!-- 左内边距（电标/数字离左边远一点） -->
+          <ColumnDefinition Width="32"/>    <!-- 左内边距（电标/数字离左边远一点） -->
           <ColumnDefinition Width="18"/>    <!-- 方块占位（方块由 BoltIcon 提供） -->
-          <ColumnDefinition Width="6"/>     <!-- 间隙 -->
+          <ColumnDefinition Width="14"/>    <!-- 间隙（文字离 bolt 图标略远） -->
           <ColumnDefinition Width="Auto"/>  <!-- Wh 组 -->
           <ColumnDefinition Width="*"/>     <!-- 中间留空 -->
           <ColumnDefinition Width="Auto"/>  <!-- 百分比 -->
@@ -202,12 +202,12 @@
                     VerticalAlignment="Center" Spacing="2">
           <TextBlock x:Name="WhValueText"
                      Text="0.0"
-                     FontFamily="{DynamicResource Hud.FontFamily}"
-                     FontSize="26" FontWeight="SemiBold"
+                     FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
+                     FontSize="26" FontWeight="Medium"
                      Foreground="White"/>
           <TextBlock x:Name="WhMaxText"
                      Text="/0.0"
-                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
                      FontSize="14" FontWeight="Medium"
                      Foreground="White" Opacity="0.55"
                      VerticalAlignment="Center"/>
@@ -217,11 +217,11 @@
                     VerticalAlignment="Center" Spacing="1">
           <TextBlock x:Name="PercentText"
                      Text="0"
-                     FontFamily="{DynamicResource Hud.FontFamily}"
-                     FontSize="22" FontWeight="SemiBold"
+                     FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
+                     FontSize="22" FontWeight="Medium"
                      Foreground="White"/>
           <TextBlock Text="%"
-                     FontFamily="{DynamicResource Hud.FontFamily}"
+                     FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
                      FontSize="13" FontWeight="Medium"
                      Foreground="White" Opacity="0.55"
                      VerticalAlignment="Center"/>
@@ -265,13 +265,13 @@
 	    </Grid>
 
 	    <!-- FPS 调试计数器（仅 show-fps 参数时可见） -->
-	    <TextBlock x:Name="FpsText"
-	               HorizontalAlignment="Right" VerticalAlignment="Bottom"
-	               FontFamily="{DynamicResource Hud.FontFamily}"
-	               FontSize="9" FontWeight="Medium"
-	               Foreground="#C6CA4C" Opacity="0.6"
-	               Margin="0,0,4,2"
-	               IsVisible="False"
-	               Text="-- FPS"/>
+		    <TextBlock x:Name="FpsText"
+		               HorizontalAlignment="Right" VerticalAlignment="Bottom"
+		               FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
+		               FontSize="9" FontWeight="Medium"
+		               Foreground="#C6CA4C" Opacity="0.6"
+		               Margin="0,0,4,2"
+		               IsVisible="False"
+		               Text="-- FPS"/>
 	  </Grid>
 	</Window>

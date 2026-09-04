@@ -24,8 +24,9 @@
 | 低电量变色 | 电量 < 20% 时黄绿电量圈变红（#FF4D4F） |
 | 提醒通知 | 低电量提醒（阈值可调 5–40%）与充满提醒（≥99%），卡牌风格弹窗，4s 自动消失 |
 | 设置窗口 | 全局缩放（0.4–1.2）、显示时长（2–10s）、HUD 位置（顶部居中/靠右/靠左）、显示器选择、语言、开机自启，保存即生效并持久化 |
-| 托盘菜单 | 左键单击弹出自定义深色菜单（预览 / 设置 / 检查更新 / 预览工具 / 退出）；右键为原生菜单兜底 |
-| 预览工具 | 独立预览窗口，不插拔电源即可调整缩放、时长、位置并实时查看效果 |
+| 托盘菜单 | 左键单击弹出自定义深色菜单（预览 / 设置 / 检查更新 / 退出） |
+| 动画微调 | 设置窗口「动画」页实时预览并微调时长 / 回弹 / 波纹参数，保存即生效并持久化 |
+| 节能模式提示 | 开 / 关节能（省电）模式时弹出对应 HUD。24H2+（build 26100+）订阅 GUID_ENERGY_SAVER_STATUS 通知、轮询注册表 EnergySaverState；旧系统用 GUID_POWER_SAVING_STATUS + SystemStatusFlag。设置「通知」页可开关 |
 | 检查更新 | 读取 GitHub Releases API，比较程序集版本，一键跳转下载页 |
 | 多语言 | 中文 / 英文，默认跟随系统，可在设置中手动切换 |
 | 开机自启 | 设置窗口「通用」页开关，写 `HKCU\...\CurrentVersion\Run`（当前用户级，无需管理员） |
@@ -94,13 +95,12 @@ EndfieldCharge/
 │  ├─ PowerWatcher.cs       # 电源变化监听 + 去抖确认
 │  └─ UpdateChecker.cs      # GitHub Releases 更新检查
 ├─ Settings/
-│  ├─ AppSettings.cs        # 设置模型（缩放/时长/位置/显示器/语言/提醒）
+│  ├─ AppSettings.cs        # 设置模型（缩放/动画微调/位置/显示器/语言/提醒）
 │  ├─ SettingsManager.cs    # 设置加载与持久化
-│  ├─ SettingsWindow.axaml  # 设置窗口（通用 / 通知 / 关于）
+│  ├─ SettingsWindow.axaml  # 设置窗口（通用 / 动画 / 通知 / 关于）
 │  └─ SettingsWindow.axaml.cs
 ├─ Views/
 │  ├─ HudWindow.axaml(.cs)  # HUD 视觉树（胶囊 / 电标 / 标题 / 数字 / 徽章 / 波纹）
-│  ├─ PreviewWindow.axaml(.cs)     # 预览工具窗口
 │  └─ TrayMenuWindow.axaml(.cs)    # 左键自定义托盘菜单
 ├─ Styles/                  # 颜色主题与图标几何（StreamGeometry）
 ├─ Assets/                  # tray_bolt.png（运行时图标）+ tray_bolt.ico（exe/安装器图标）

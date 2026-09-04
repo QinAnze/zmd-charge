@@ -4,16 +4,45 @@ using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
+using EndfieldCharge.Settings;
 
 namespace EndfieldCharge.Animations;
+
+/// <summary>
+/// 动画可调参数（来自设置窗口"动画"页，支持实时预览）。
+/// </summary>
+public sealed record AnimationOptions
+{
+    /// <summary>总时长（秒），3~10。</summary>
+    public double DurationSeconds { get; init; } = 6.0;
+
+    /// <summary>回弹强度 0~0.5，映射 KS_BackOut 第二控制点 Y = 1 + 值。</summary>
+    public double BounceStrength { get; init; } = 0.275;
+
+    /// <summary>波纹强度倍率 0~2。</summary>
+    public double RippleIntensity { get; init; } = 1.0;
+
+    /// <summary>波纹幅度倍率 0.5~1.5。</summary>
+    public double RippleSpread { get; init; } = 1.0;
+
+    public static AnimationOptions Default { get; } = new();
+
+    public static AnimationOptions FromSettings(AppSettings s) => new()
+    {
+        DurationSeconds = Math.Clamp(s.DisplayDurationSeconds, 3d, 10d),
+        BounceStrength = Math.Clamp(s.BounceStrength, 0d, 0.5d),
+        RippleIntensity = Math.Clamp(s.RippleIntensity, 0d, 2d),
+        RippleSpread = Math.Clamp(s.RippleSpread, 0.5d, 1.5d),
+    };
+}
 
 /// <summary>
 /// "灵动岛"三态时间线（高度 小→大→小，横向 560 恒定）：
 ///
 ///   0.04-0.10  电标单独弹出（缩放回弹）
-///   0.07-0.09  胶囊背景弹出（scale 0.6→1, op 0→1，KS_Out 避免过冲闪屏）
+///   0.07-0.09  胶囊背景弹出（scale 0.6→1, op 0→1）
 ///   0.09-0.12  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形）
-///   0.12-0.20  电标从中间平滑滑到左侧 B 位（0.48s，easeInOutCubic，无过冲）；
+///   0.12-0.20  电标从中间平滑滑到左侧 B 位（easeInOutCubic，无过冲）；
 ///               RippleHost 用同一条曲线同步跟随，三圈波纹同时从 0 扩散
 ///   0.20-0.25  「/// SUPER CHARGE MODE + 超充模式」居中淡入
 ///   0.25-0.30  状态 B 短停
@@ -24,12 +53,14 @@ namespace EndfieldCharge.Animations;
 ///   0.42-0.86  完整状态 C 展示
 ///   0.86-0.89  整体缩小退出
 ///
-/// 横向长度 560 全程恒定；高度：A(60) → B(90) → C(60)。
+/// 以上为 6s 基线时间线。实际播放时：入场段（0→0.42）保持基线绝对时长，
+/// 停留段按 DurationSeconds 拉伸/压缩（见 MapCue）。
 /// 注意：KeyFrame 的 Cue 必须严格递增（乱序会让某一段被压缩到 30ms，位移看起来像瞬移）。
 /// </summary>
 internal static class HudAnimations
 {
-    public static readonly TimeSpan Timeline = TimeSpan.FromSeconds(6.0);
+    private const double BaselineSeconds = 6.0;
+    private const double IntroEndCue = 0.42;   // 入场段结束（电量数字淡入完成）
 
     private const double TStart = 0.04;
     private const double TAppear = 0.07;
@@ -56,36 +87,53 @@ internal static class HudAnimations
     private static readonly KeySpline KS_In = new(0.42, 0, 1, 1);
     private static readonly KeySpline KS_Out = new(0, 0, 0.58, 1);
     private static readonly KeySpline KS_InOut = new(0.42, 0, 0.58, 1);
-    private static readonly KeySpline KS_BackOut = new(0.175, 0.885, 0.32, 1.275);
     /// <summary>easeInOutCubic：位移专用——两端慢中间快，且不过冲，滑动观感最顺。</summary>
     private static readonly KeySpline KS_Smooth = new(0.65, 0, 0.35, 1);
 
+    /// <summary>回弹曲线：过冲量由 BounceStrength 控制（0 = 无过冲的快出曲线）。</summary>
+    private static KeySpline BackOut(AnimationOptions o) =>
+        new(0.175, 0.885, 0.32, 1d + o.BounceStrength);
+
+    /// <summary>
+    /// 基线 cue → 实际时间线 cue。
+    /// 入场段（≤0.42）固定占 0.42×6s=2.52s，剩余时间全给停留+退出段线性分配。
+    /// DurationSeconds=6 时为恒等映射。
+    /// </summary>
+    private static double MapCue(AnimationOptions o, double cue)
+    {
+        double d = Math.Clamp(o.DurationSeconds, 3d, 10d);
+        double introFrac = IntroEndCue * BaselineSeconds / d;
+        if (cue <= IntroEndCue)
+            return cue / IntroEndCue * introFrac;
+        return introFrac + (cue - IntroEndCue) / (1 - IntroEndCue) * (1 - introFrac);
+    }
+
     // ===================================================================
 
-    /// <summary>胶囊圆角：30(全圆) ↔ 12(矩形圆角)。</summary>
-    public static Animation PillCorner()
+    /// <summary>胶囊圆角：30(全圆) ↔ 18(矩形圆角)。</summary>
+    public static Animation PillCorner(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, CR(PillRadiusA)));
-        a.Children.Add(KF(TAppear, KS_In, CR(PillRadiusA)));
-        a.Children.Add(KF(TExpand, KS_InOut, CR(PillRadiusB)));
-        a.Children.Add(KF(THoldB, KS_In, CR(PillRadiusB)));
-        a.Children.Add(KF(TContract, KS_InOut, CR(PillRadiusA)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, CR(PillRadiusA)));
+        a.Children.Add(KF(MapCue(o, TAppear), KS_In, CR(PillRadiusA)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_InOut, CR(PillRadiusB)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, CR(PillRadiusB)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, CR(PillRadiusA)));
         return a;
     }
 
     /// <summary>
     /// 胶囊背景弹出：scale 0.6→1, op 0→1。
-    /// 用 KS_BackOut 带回弹效果，胶囊弹出时先略微过冲再回落，视觉张力更强。
+    /// 用回弹曲线带过冲效果，胶囊弹出时先略微过冲再回落，视觉张力更强。
     /// </summary>
-    public static Animation PillAppear()
+    public static Animation PillAppear(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(TStart, KS_In, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(TAppear, KS_In, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(TPillOut, KS_BackOut, Op(1), SX(1d), SY(1d)));
-        a.Children.Add(KF(THoldC, KS_In, Op(1), SX(1d), SY(1d)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0), SX(0.6), SY(0.6)));
+        a.Children.Add(KF(MapCue(o, TStart), KS_In, Op(0), SX(0.6), SY(0.6)));
+        a.Children.Add(KF(MapCue(o, TAppear), KS_In, Op(0), SX(0.6), SY(0.6)));
+        a.Children.Add(KF(MapCue(o, TPillOut), BackOut(o), Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1), SX(1d), SY(1d)));
         return a;
     }
 
@@ -94,45 +142,44 @@ internal static class HudAnimations
     /// 横向长度 560 恒定；独立于 CornerRadius 轨道，两者同段配合形成"胶囊撑高/收回"。
     /// 同时给 RippleHost 用同一动画，让波纹裁剪范围随 pill 高度同步变化。
     /// </summary>
-    public static Animation PillHeight()
+    public static Animation PillHeight(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, H(PillHeightA)));
-        a.Children.Add(KF(TAppear, KS_In, H(PillHeightA)));
-        a.Children.Add(KF(TExpand, KS_BackOut, H(PillHeightB)));
-        a.Children.Add(KF(THoldB, KS_In, H(PillHeightB)));
-        a.Children.Add(KF(TContract, KS_InOut, H(PillHeightA)));
-        a.Children.Add(KF(THoldC, KS_In, H(PillHeightA)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, H(PillHeightA)));
+        a.Children.Add(KF(MapCue(o, TAppear), KS_In, H(PillHeightA)));
+        a.Children.Add(KF(MapCue(o, TExpand), BackOut(o), H(PillHeightB)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, H(PillHeightB)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, H(PillHeightA)));
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, H(PillHeightA)));
         return a;
     }
 
     /// <summary>收尾整体缩小（scale 1→0），ease-in 慢起快收。</summary>
-    public static Animation ScaleOut()
+    public static Animation ScaleOut(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, SX(1d), SY(1d)));
-        a.Children.Add(KF(THoldC, KS_In, SX(1d), SY(1d)));
-        a.Children.Add(KF(TClose, KS_In, SX(0d), SY(0d)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCue(o, TClose), KS_In, SX(0d), SY(0d)));
         return a;
     }
 
     /// <summary>
     /// 电标：弹出（缩放回弹）→ 停留中央 → 平滑滑到左侧 B 位 → B→C 再滑到贴左 C 位。
-    /// 位移一律用 KS_Smooth（easeInOutCubic）+ 0.48s / 0.36s 的独立时间片，
-    /// 不再用 KS_BackOut（它 80% 的行程在前 20% 时间内跑完，179px 看着就是瞬移）。
-    /// Cue 严格递增：0 → 0.04 → 0.10 → 0.12 → 0.20 → 0.30 → 0.36 → 0.86。
+    /// 位移一律用 KS_Smooth（easeInOutCubic）+ 独立时间片，不用回弹曲线
+    /// （它 80% 的行程在前 20% 时间内跑完，179px 看着就是瞬移）。
     /// </summary>
-    public static Animation BoltIcon()
+    public static Animation BoltIcon(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0.00, null, Op(0), SX(0.4), SY(0.4), TX(0)));
-        a.Children.Add(KF(TStart, KS_In, Op(0), SX(0.4), SY(0.4), TX(0)));
-        a.Children.Add(KF(TBoltPop, KS_BackOut, Op(1), SX(1.12), SY(1.12), TX(0)));
-        a.Children.Add(KF(TExpand, KS_Out, Op(1), SX(1), SY(1), TX(0)));
-        a.Children.Add(KF(TMove, KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetB)));
-        a.Children.Add(KF(THoldB, KS_In, Op(1), SX(1), SY(1), TX(IconOffsetB)));
-        a.Children.Add(KF(TContract, KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetC)));
-        a.Children.Add(KF(THoldC, KS_In, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0.00), null, Op(0), SX(0.4), SY(0.4), TX(0)));
+        a.Children.Add(KF(MapCue(o, TStart), KS_In, Op(0), SX(0.4), SY(0.4), TX(0)));
+        a.Children.Add(KF(MapCue(o, TBoltPop), BackOut(o), Op(1), SX(1.12), SY(1.12), TX(0)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_Out, Op(1), SX(1), SY(1), TX(0)));
+        a.Children.Add(KF(MapCue(o, TMove), KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetB)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, Op(1), SX(1), SY(1), TX(IconOffsetB)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1), SX(1), SY(1), TX(IconOffsetC)));
         return a;
     }
 
@@ -140,36 +187,36 @@ internal static class HudAnimations
     /// RippleHost 跟随电标位移：状态 A 居中 → 状态 B 左移（与 BoltIcon 同步）。
     /// 必须与 BoltIcon 使用同一条曲线、同一段时间片，否则波纹会和电标脱开。
     /// </summary>
-    public static Animation RippleHost()
+    public static Animation RippleHost(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, TX(0)));
-        a.Children.Add(KF(TExpand, KS_In, TX(0)));
-        a.Children.Add(KF(TMove, KS_Smooth, TX(IconOffsetB)));
-        a.Children.Add(KF(THoldB, KS_In, TX(IconOffsetB)));
-        a.Children.Add(KF(TContract, KS_Smooth, TX(IconOffsetC)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, TX(0)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_In, TX(0)));
+        a.Children.Add(KF(MapCue(o, TMove), KS_Smooth, TX(IconOffsetB)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, TX(IconOffsetB)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_Smooth, TX(IconOffsetC)));
         return a;
     }
 
     /// <summary>圆形形态：随电标淡入，B→C 交叉淡化时让位给方形态。</summary>
-    public static Animation CircleForm()
+    public static Animation CircleForm(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(TStart, KS_In, Op(0)));
-        a.Children.Add(KF(TAppear, KS_Out, Op(1)));
-        a.Children.Add(KF(THoldB, KS_In, Op(1)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(0)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0)));
+        a.Children.Add(KF(MapCue(o, TStart), KS_In, Op(0)));
+        a.Children.Add(KF(MapCue(o, TAppear), KS_Out, Op(1)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, Op(1)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, Op(0)));
         return a;
     }
 
     /// <summary>方形态：B→C 交叉淡化时浮现。</summary>
-    public static Animation SquareForm()
+    public static Animation SquareForm(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(THoldB, KS_In, Op(0)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(1)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, Op(0)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, Op(1)));
         return a;
     }
 
@@ -177,114 +224,129 @@ internal static class HudAnimations
     /// 标题态：居中于胶囊。等电标滑到位（TMove）之后才淡入 0.20→0.25，
     /// 保证"电标先滑到左边 → 再出超充模式"的先后顺序。
     /// </summary>
-    public static Animation TitleHost()
+    public static Animation TitleHost(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(TMove, KS_In, Op(0)));
-        a.Children.Add(KF(TTitle, KS_Out, Op(1)));
-        a.Children.Add(KF(THoldB, KS_In, Op(1)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(0)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0)));
+        a.Children.Add(KF(MapCue(o, TMove), KS_In, Op(0)));
+        a.Children.Add(KF(MapCue(o, TTitle), KS_Out, Op(1)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_In, Op(1)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, Op(0)));
         return a;
     }
 
     /// <summary>数字态：等 C 态完全稳定（胶囊收窄、电标到位）之后才淡入。</summary>
-    public static Animation NumHost()
+    public static Animation NumHost(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(TContract, KS_In, Op(0)));       // 0.36 → C 态已就绪，隐藏
-        a.Children.Add(KF(TNumIn, KS_In, Op(0)));           // 0.50 → 保持隐藏
-        a.Children.Add(KF(TNumReady, KS_Out, Op(1)));       // 0.56 → 淡入完成
-        a.Children.Add(KF(THoldC, KS_In, Op(1)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_In, Op(0)));  // C 态已就绪，隐藏
+        a.Children.Add(KF(MapCue(o, TNumIn), KS_In, Op(0)));     // 保持隐藏
+        a.Children.Add(KF(MapCue(o, TNumReady), KS_Out, Op(1))); // 淡入完成
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1)));
         return a;
     }
 
     /// <summary>
     /// 波纹 Host 抬升：扩散起点在电标正下方 16px，随扩散过程（TExpand+0.02 → THoldB）
-    /// 抬升到 0（与电标圆心对齐），扩散完成态环与电标圆同心。
+    /// 抬升到 0（与电标圆心对齐），扩散完成态环与电标圆心同心。
     /// </summary>
-    public static Animation RippleRise()
+    public static Animation RippleRise(AnimationOptions o)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, TY(16)));
-        a.Children.Add(KF(TExpand, KS_In, TY(16)));
-        a.Children.Add(KF(TExpand + 0.02, KS_Out, TY(16)));
-        a.Children.Add(KF(THoldB, KS_Out, TY(0)));
-        a.Children.Add(KF(TContract, KS_InOut, TY(0)));
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, TY(16)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_In, TY(16)));
+        a.Children.Add(KF(MapCue(o, TExpand + 0.02), KS_Out, TY(16)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_Out, TY(0)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, TY(0)));
         return a;
     }
 
     /// <summary>
     /// 单圈波纹：起点 TExpand（圆胶囊变矩形时），从 0 尺寸开始扩散（scale 0 → endScale），
-    /// 0.24→0.26 淡入到峰值透明度，0.26→0.34 扩散到目标 scale 停住，0.34→0.40 随工业模式淡出。
-    /// startScale 传 0 表示从电标正下方的小点向外扩散。
+    /// 淡入到峰值透明度，扩散到目标 scale 停住，随工业模式淡出。
+    /// endScale / peakOp 分别乘上 RippleSpread / RippleIntensity 倍率。
     /// </summary>
-    public static Animation Ripple(double startScale, double endScale, double peakOp)
+    public static Animation Ripple(AnimationOptions o, double endScale, double peakOp)
     {
-        var a = New();
-        a.Children.Add(KF(0d, null, Op(0), SX(startScale), SY(startScale)));
-        a.Children.Add(KF(TExpand, KS_In, Op(0), SX(startScale), SY(startScale)));
-        a.Children.Add(KF(TExpand + 0.02, KS_Out, Op(peakOp), SX(0.05), SY(0.05)));
-        a.Children.Add(KF(THoldB, KS_Out, Op(peakOp), SX(endScale), SY(endScale)));
-        a.Children.Add(KF(TContract, KS_InOut, Op(0), SX(endScale), SY(endScale)));
+        double spread = Math.Clamp(o.RippleSpread, 0.5d, 1.5d);
+        double intensity = Math.Clamp(o.RippleIntensity, 0d, 2d);
+        double target = endScale * spread;
+        double peak = Math.Min(1d, peakOp * intensity);
+
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0), SX(0), SY(0)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_In, Op(0), SX(0), SY(0)));
+        a.Children.Add(KF(MapCue(o, TExpand + 0.02), KS_Out, Op(peak), SX(0.05), SY(0.05)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_Out, Op(peak), SX(target), SY(target)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, Op(0), SX(target), SY(target)));
         return a;
     }
 
     // ---------------- 简化版（拔电显示电量） ----------------
     // 只弹"电量圆胶囊"：无电标先出、无工业模式矩形、无波纹。直接全圆胶囊 + 电量内容。
 
-    public static readonly TimeSpan SimpleTimeline = TimeSpan.FromSeconds(5.0);
+    private const double SimpleBaselineSeconds = 5.0;
+    private const double SimpleIntroEndCue = 0.08;  // 内容淡入完成
 
-    private const double TSimpleAppear = 0.05;  // 弹出完成（scale 0.6→1, op 0→1，加速一倍）
+    private const double TSimpleAppear = 0.05;  // 弹出完成（scale 0.6→1, op 0→1）
     private const double TSimpleHold = 0.75;    // 停留结束
-    private const double TSimpleClose = 0.80;   // 收回完成（scale 1→0，加速一倍）
+    private const double TSimpleClose = 0.80;   // 收回完成（scale 1→0）
+
+    private static double MapCueSimple(AnimationOptions o, double cue)
+    {
+        double d = Math.Clamp(o.DurationSeconds, 3d, 10d);
+        double introFrac = SimpleIntroEndCue * SimpleBaselineSeconds / d;
+        if (cue <= SimpleIntroEndCue)
+            return cue / SimpleIntroEndCue * introFrac;
+        return introFrac + (cue - SimpleIntroEndCue) / (1 - SimpleIntroEndCue) * (1 - introFrac);
+    }
 
     /// <summary>胶囊弹出：scale 0.6→1 + op 0→1（KS_Out 避免过冲闪屏），停留后保持。</summary>
-    public static Animation SimplePillAppear()
+    public static Animation SimplePillAppear(AnimationOptions o)
     {
-        var a = NewSimple();
-        a.Children.Add(KF(0d, null, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(TSimpleAppear, KS_Out, Op(1), SX(1d), SY(1d)));
-        a.Children.Add(KF(TSimpleHold, KS_In, Op(1), SX(1d), SY(1d)));
+        var a = NewSimple(o);
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0), SX(0.6), SY(0.6)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_Out, Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, Op(1), SX(1d), SY(1d)));
         return a;
     }
 
     /// <summary>
     /// 内容淡入（电标方块 + 数字 + 徽章）：等胶囊完全弹出（TSimpleAppear）后，
-    /// 在 0.05→0.08 之间快速显现。
+    /// 快速显现。
     /// </summary>
-    public static Animation SimpleFadeIn()
+    public static Animation SimpleFadeIn(AnimationOptions o)
     {
-        var a = NewSimple();
-        a.Children.Add(KF(0d, null, Op(0)));
-        a.Children.Add(KF(TSimpleAppear, KS_In, Op(0)));
-        a.Children.Add(KF(TSimpleAppear + 0.03, KS_Out, Op(1)));
-        a.Children.Add(KF(TSimpleHold, KS_In, Op(1)));
+        var a = NewSimple(o);
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_In, Op(0)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear + 0.03), KS_Out, Op(1)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, Op(1)));
         return a;
     }
 
     /// <summary>收尾整体缩小（scale 1→0），ease-in 慢起快收。</summary>
-    public static Animation SimpleScaleOut()
+    public static Animation SimpleScaleOut(AnimationOptions o)
     {
-        var a = NewSimple();
-        a.Children.Add(KF(0d, null, SX(1d), SY(1d)));
-        a.Children.Add(KF(TSimpleHold, KS_In, SX(1d), SY(1d)));
-        a.Children.Add(KF(TSimpleClose, KS_In, SX(0d), SY(0d)));
+        var a = NewSimple(o);
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleClose), KS_In, SX(0d), SY(0d)));
         return a;
     }
 
-    private static Animation NewSimple() => new()
+    // ---------------- 构造辅助 ----------------
+
+    private static Animation New(AnimationOptions o) => new()
     {
-        Duration = SimpleTimeline,
+        Duration = TimeSpan.FromSeconds(Math.Clamp(o.DurationSeconds, 3d, 10d)),
         FillMode = FillMode.Forward,
     };
 
-    // ---------------- 构造辅助 ----------------
-
-    private static Animation New() => new()
+    private static Animation NewSimple(AnimationOptions o) => new()
     {
-        Duration = Timeline,
+        Duration = TimeSpan.FromSeconds(Math.Clamp(o.DurationSeconds, 3d, 10d)),
         FillMode = FillMode.Forward,
     };
 

@@ -16,6 +16,13 @@ using EndfieldCharge.Settings;
 
 namespace EndfieldCharge.Views;
 
+/// <summary>完整三态动画的文案主题：充电（超充模式）或省电模式。</summary>
+public enum HudPlayMode
+{
+    Charge,
+    PowerSaver,
+}
+
 public partial class HudWindow : Window
 {
     private static readonly TimeSpan DismissDuration = TimeSpan.FromMilliseconds(160);
@@ -25,6 +32,7 @@ public partial class HudWindow : Window
 
     private CancellationTokenSource? _cts;
     private AppSettings _settings = new();
+    private AnimationOptions _animOptions = AnimationOptions.Default;
     private int _fpsFrameCount;
     private DateTime _fpsLastMeasure = DateTime.UtcNow;
     private bool _fpsEnabled;
@@ -49,10 +57,11 @@ public partial class HudWindow : Window
         ResetToInitial();
     }
 
-    /// <summary>从设置更新 HUD 参数（缩放、时长、位置、显示器）。</summary>
+    /// <summary>从设置更新 HUD 参数（缩放、动画微调、位置、显示器）。</summary>
     public void ApplySettings(AppSettings settings)
     {
         _settings = settings;
+        _animOptions = AnimationOptions.FromSettings(settings);
 
         // 全局缩放
         GlobalScale.RenderTransform = new ScaleTransform(settings.GlobalScale, settings.GlobalScale);
@@ -64,9 +73,11 @@ public partial class HudWindow : Window
 
     // ---------------- 动画播放 ----------------
 
-    public async Task ShowSimpleAsync(BatterySnapshot? battery)
+    public async Task ShowSimpleAsync(BatterySnapshot? battery, AnimationOptions? options = null)
     {
         ApplyBattery(battery, acOnline: false);
+
+        var o = options ?? _animOptions;
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -81,10 +92,10 @@ public partial class HudWindow : Window
         try
         {
             await Task.WhenAll(
-                HudAnimations.SimplePillAppear().RunAsync(Pill, ct),
-                HudAnimations.SimpleFadeIn().RunAsync(BoltIcon, ct),
-                HudAnimations.SimpleFadeIn().RunAsync(NumHost, ct),
-                HudAnimations.SimpleScaleOut().RunAsync(ScaleHost, ct));
+                HudAnimations.SimplePillAppear(o).RunAsync(Pill, ct),
+                HudAnimations.SimpleFadeIn(o).RunAsync(BoltIcon, ct),
+                HudAnimations.SimpleFadeIn(o).RunAsync(NumHost, ct),
+                HudAnimations.SimpleScaleOut(o).RunAsync(ScaleHost, ct));
         }
         catch (OperationCanceledException)
         {
@@ -95,9 +106,19 @@ public partial class HudWindow : Window
             Hide();
     }
 
-    public async Task ShowAndPlayAsync(BatterySnapshot? battery, bool acOnline)
+    public async Task ShowAndPlayAsync(
+        BatterySnapshot? battery,
+        bool acOnline,
+        HudPlayMode mode = HudPlayMode.Charge,
+        AnimationOptions? options = null)
     {
         ApplyBattery(battery, acOnline);
+
+        // 文案主题：充电 = 超充模式；省电 = 省电模式
+        TagLineText.Text = mode == HudPlayMode.PowerSaver ? Localization.TagLineSaver : Localization.TagLine;
+        TitleText.Text = mode == HudPlayMode.PowerSaver ? Localization.TitleSaver : Localization.TitleMode;
+
+        var o = options ?? _animOptions;
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -123,23 +144,23 @@ public partial class HudWindow : Window
         try
         {
             await Task.WhenAll(
-                HudAnimations.PillCorner().RunAsync(Pill, ct),
-                HudAnimations.PillAppear().RunAsync(Pill, ct),
-                HudAnimations.PillHeight().RunAsync(Pill, ct),
-                HudAnimations.PillHeight().RunAsync(RippleHost, ct),
-                HudAnimations.ScaleOut().RunAsync(ScaleHost, ct),
-                HudAnimations.BoltIcon().RunAsync(BoltIcon, ct),
-                HudAnimations.RippleHost().RunAsync(RippleHost, ct),
-                HudAnimations.CircleForm().RunAsync(CircleForm, ct),
-                HudAnimations.SquareForm().RunAsync(SquareForm, ct),
-                HudAnimations.TitleHost().RunAsync(TitleHost, ct),
-                HudAnimations.NumHost().RunAsync(NumHost, ct),
-                HudAnimations.Ripple(0.0, 1.5, 0.50).RunAsync(RippleInner, ct),
-                HudAnimations.Ripple(0.0, 2.0, 0.50).RunAsync(RippleMid, ct),
-                HudAnimations.Ripple(0.0, 2.5, 0.60).RunAsync(RippleOuter, ct),
-                HudAnimations.RippleRise().RunAsync(RippleInnerHost, ct),
-                HudAnimations.RippleRise().RunAsync(RippleMidHost, ct),
-                HudAnimations.RippleRise().RunAsync(RippleOuterHost, ct));
+                HudAnimations.PillCorner(o).RunAsync(Pill, ct),
+                HudAnimations.PillAppear(o).RunAsync(Pill, ct),
+                HudAnimations.PillHeight(o).RunAsync(Pill, ct),
+                HudAnimations.PillHeight(o).RunAsync(RippleHost, ct),
+                HudAnimations.ScaleOut(o).RunAsync(ScaleHost, ct),
+                HudAnimations.BoltIcon(o).RunAsync(BoltIcon, ct),
+                HudAnimations.RippleHost(o).RunAsync(RippleHost, ct),
+                HudAnimations.CircleForm(o).RunAsync(CircleForm, ct),
+                HudAnimations.SquareForm(o).RunAsync(SquareForm, ct),
+                HudAnimations.TitleHost(o).RunAsync(TitleHost, ct),
+                HudAnimations.NumHost(o).RunAsync(NumHost, ct),
+                HudAnimations.Ripple(o, 1.5, 0.50).RunAsync(RippleInner, ct),
+                HudAnimations.Ripple(o, 2.0, 0.50).RunAsync(RippleMid, ct),
+                HudAnimations.Ripple(o, 2.5, 0.60).RunAsync(RippleOuter, ct),
+                HudAnimations.RippleRise(o).RunAsync(RippleInnerHost, ct),
+                HudAnimations.RippleRise(o).RunAsync(RippleMidHost, ct),
+                HudAnimations.RippleRise(o).RunAsync(RippleOuterHost, ct));
         }
         catch (OperationCanceledException)
         {

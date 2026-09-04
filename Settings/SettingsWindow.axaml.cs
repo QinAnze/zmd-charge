@@ -9,14 +9,21 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using EndfieldCharge.Animations;
+using EndfieldCharge.Services;
+using EndfieldCharge.Views;
 
 namespace EndfieldCharge.Settings;
 
 public partial class SettingsWindow : Window
 {
-    public SettingsWindow(AppSettings settings)
+    private readonly HudWindow _hud;
+
+    public SettingsWindow(AppSettings settings, HudWindow hud, string initialTab = "General")
     {
         InitializeComponent();
+
+        _hud = hud;
 
         // 窗口图标
         try
@@ -29,6 +36,7 @@ public partial class SettingsWindow : Window
         Title = Localization.SettingsTitle;
         InitLanguageCombo();
         InitPositionCombo();
+        InitPreviewModeCombo();
         ApplyLocalization();
 
         PopulateMonitors();
@@ -36,6 +44,7 @@ public partial class SettingsWindow : Window
 
         // Tab 切换
         TabGeneralBtn.PointerPressed += (_, _) => SwitchTab(TabGeneralBtn, GeneralPanel);
+        TabAnimationBtn.PointerPressed += (_, _) => SwitchTab(TabAnimationBtn, AnimationPanel);
         TabNotificationsBtn.PointerPressed += (_, _) => SwitchTab(TabNotificationsBtn, NotificationsPanel);
         TabAboutBtn.PointerPressed += (_, _) => SwitchTab(TabAboutBtn, AboutPanel);
 
@@ -48,7 +57,22 @@ public partial class SettingsWindow : Window
         DurationSlider.PropertyChanged += (_, e) =>
         {
             if (e.Property == RangeBase.ValueProperty)
-                DurationValue.Text = DurationSlider.Value.ToString("F1");
+                DurationValue.Text = $"{DurationSlider.Value:F1}s";
+        };
+        BounceSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == RangeBase.ValueProperty)
+                BounceValue.Text = BounceSlider.Value.ToString("F3");
+        };
+        RippleIntensitySlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == RangeBase.ValueProperty)
+                RippleIntensityValue.Text = RippleIntensitySlider.Value.ToString("F2");
+        };
+        RippleSpreadSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == RangeBase.ValueProperty)
+                RippleSpreadValue.Text = RippleSpreadSlider.Value.ToString("F2");
         };
         LowBatterySlider.PropertyChanged += (_, e) =>
         {
@@ -65,9 +89,18 @@ public partial class SettingsWindow : Window
         // 事件
         SaveBtn.Click += OnSave;
         CheckUpdateBtn.Click += OnCheckUpdate;
+        PreviewPlayBtn.Click += OnPlayPreview;
+        FontInstallBtn.Click += OnInstallFont;
 
         // 默认 Tab
-        SwitchTab(TabGeneralBtn, GeneralPanel);
+        var (tab, panel) = initialTab switch
+        {
+            "Animation" => (TabAnimationBtn, AnimationPanel),
+            "Notifications" => (TabNotificationsBtn, NotificationsPanel),
+            "About" => (TabAboutBtn, AboutPanel),
+            _ => (TabGeneralBtn, GeneralPanel),
+        };
+        SwitchTab(tab, panel);
     }
 
     // ---------------- 初始化 ComboBox 项 ----------------
@@ -88,12 +121,21 @@ public partial class SettingsWindow : Window
         PositionCombo.Items.Add(new ComboBoxItem { Tag = "TopLeft" });
     }
 
+    private void InitPreviewModeCombo()
+    {
+        PreviewModeCombo.Items.Clear();
+        PreviewModeCombo.Items.Add(new ComboBoxItem { Tag = "plug" });
+        PreviewModeCombo.Items.Add(new ComboBoxItem { Tag = "saver" });
+        PreviewModeCombo.Items.Add(new ComboBoxItem { Tag = "unplug" });
+    }
+
     // ---------------- 本地化 ----------------
 
     private void ApplyLocalization()
     {
         WinTitle.Text = Localization.SettingsTitle;
         TabGeneralText.Text = Localization.TabGeneral;
+        TabAnimationText.Text = Localization.TabAnimation;
         TabNotificationsText.Text = Localization.TabNotifications;
         TabAboutText.Text = Localization.TabAbout;
         LabelScale.Text = Localization.LabelScale;
@@ -105,9 +147,22 @@ public partial class SettingsWindow : Window
         LabelLowBatteryEnable.Text = Localization.LabelLowBatteryEnable;
         LabelLowBattery.Text = Localization.LabelLowBattery;
         LabelFullChargeEnable.Text = Localization.LabelFullChargeEnable;
+        LabelPowerSaverNotify.Text = Localization.LabelPowerSaverNotify;
+        PowerSaverNotifyDesc.Text = Localization.PowerSaverNotifyDesc;
         LabelVersion.Text = Localization.LabelVersion;
+        LabelAuthor.Text = Localization.LabelAuthor;
         SaveBtn.Content = Localization.BtnSave;
         CheckUpdateBtn.Content = Localization.BtnCheckUpdate;
+        FontDescText.Text = Localization.FontDesc;
+        FontInstallBtn.Content = Localization.BtnInstallFont;
+
+        SectionAnimParams.Text = Localization.SectionAnimParams;
+        SectionPreview.Text = Localization.SectionPreview;
+        LabelBounce.Text = Localization.LabelBounce;
+        LabelRippleIntensity.Text = Localization.LabelRippleIntensity;
+        LabelRippleSpread.Text = Localization.LabelRippleSpread;
+        LabelPlayMode.Text = Localization.LabelPlayMode;
+        PreviewPlayBtn.Content = Localization.BtnPlay;
 
         if (LanguageCombo.Items.Count >= 3)
         {
@@ -121,6 +176,13 @@ public partial class SettingsWindow : Window
             if (PositionCombo.Items[0] is ComboBoxItem pi0) pi0.Content = Localization.PosTopCenter;
             if (PositionCombo.Items[1] is ComboBoxItem pi1) pi1.Content = Localization.PosTopRight;
             if (PositionCombo.Items[2] is ComboBoxItem pi2) pi2.Content = Localization.PosTopLeft;
+        }
+
+        if (PreviewModeCombo.Items.Count >= 3)
+        {
+            if (PreviewModeCombo.Items[0] is ComboBoxItem mi0) mi0.Content = Localization.ModePlug;
+            if (PreviewModeCombo.Items[1] is ComboBoxItem mi1) mi1.Content = Localization.ModeSaver;
+            if (PreviewModeCombo.Items[2] is ComboBoxItem mi2) mi2.Content = Localization.ModeUnplug;
         }
     }
 
@@ -149,6 +211,9 @@ public partial class SettingsWindow : Window
     {
         ScaleSlider.Value = s.GlobalScale;
         DurationSlider.Value = s.DisplayDurationSeconds;
+        BounceSlider.Value = s.BounceStrength;
+        RippleIntensitySlider.Value = s.RippleIntensity;
+        RippleSpreadSlider.Value = s.RippleSpread;
         PositionCombo.SelectedIndex = (int)s.HudPosition;
         MonitorCombo.SelectedIndex = s.MonitorIndex >= 0 && s.MonitorIndex < MonitorCombo.Items.Count
             ? s.MonitorIndex
@@ -161,6 +226,7 @@ public partial class SettingsWindow : Window
             _ => 0,
         };
 
+        PowerSaverSwitch.IsChecked = s.EnablePowerSaverNotify;
         LowBatterySwitch.IsChecked = s.EnableLowBatteryAlert;
         LowBatterySlider.Value = s.LowBatteryThreshold;
         LowBatterySlider.IsEnabled = s.EnableLowBatteryAlert;
@@ -168,12 +234,19 @@ public partial class SettingsWindow : Window
         AutoStartSwitch.IsChecked = s.EnableAutoStart;
 
         VersionText.Text = GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
+        FontDescText.Text = Localization.FontDesc;
+        FontInstallBtn.Content = Localization.BtnInstallFont;
+        FontStatusText.Text = string.Empty;
     }
 
     private AppSettings CollectSettings() => new()
     {
         GlobalScale = Math.Round(ScaleSlider.Value, 2),
         DisplayDurationSeconds = Math.Round(DurationSlider.Value, 1),
+        BounceStrength = Math.Round(BounceSlider.Value, 3),
+        RippleIntensity = Math.Round(RippleIntensitySlider.Value, 2),
+        RippleSpread = Math.Round(RippleSpreadSlider.Value, 2),
         HudPosition = (HudPosition)PositionCombo.SelectedIndex,
         MonitorIndex = MonitorCombo.SelectedItem is ComboBoxItem item && item.Tag is int idx
             ? idx
@@ -187,6 +260,7 @@ public partial class SettingsWindow : Window
         EnableLowBatteryAlert = LowBatterySwitch.IsChecked == true,
         LowBatteryThreshold = (int)LowBatterySlider.Value,
         EnableFullChargeAlert = FullChargeSwitch.IsChecked == true,
+        EnablePowerSaverNotify = PowerSaverSwitch.IsChecked == true,
         EnableAutoStart = AutoStartSwitch.IsChecked == true,
     };
 
@@ -195,14 +269,62 @@ public partial class SettingsWindow : Window
     private void SwitchTab(Border tabBtn, StackPanel panel)
     {
         TabGeneralBtn.Background = Brushes.Transparent;
+        TabAnimationBtn.Background = Brushes.Transparent;
         TabNotificationsBtn.Background = Brushes.Transparent;
         TabAboutBtn.Background = Brushes.Transparent;
 
         tabBtn.Background = new SolidColorBrush(Color.Parse("#2A2A2D"));
 
         GeneralPanel.IsVisible = panel == GeneralPanel;
+        AnimationPanel.IsVisible = panel == AnimationPanel;
         NotificationsPanel.IsVisible = panel == NotificationsPanel;
         AboutPanel.IsVisible = panel == AboutPanel;
+    }
+
+    // ---------------- 动画预览 ----------------
+
+    /// <summary>用当前滑块值（未保存也生效）实时预览动画。</summary>
+    private async void OnPlayPreview(object? sender, RoutedEventArgs e)
+    {
+        PreviewPlayBtn.IsEnabled = false;
+
+        // 用当前滑块值构造参数，无需保存即可预览效果
+        var options = new AnimationOptions
+        {
+            DurationSeconds = Math.Clamp(DurationSlider.Value, 3d, 10d),
+            BounceStrength = Math.Clamp(BounceSlider.Value, 0d, 0.5d),
+            RippleIntensity = Math.Clamp(RippleIntensitySlider.Value, 0d, 2d),
+            RippleSpread = Math.Clamp(RippleSpreadSlider.Value, 0.5d, 1.5d),
+        };
+
+        var sample = new BatterySnapshot(
+            RemainingWh: 62.4, FullWh: 90.0,
+            Percent: 69, AcOnline: true, Charging: true);
+
+        try
+        {
+            switch (PreviewModeCombo.SelectedIndex)
+            {
+                case 1:
+                    await _hud.ShowAndPlayAsync(sample, acOnline: true,
+                        HudPlayMode.PowerSaver, options);
+                    break;
+                case 2:
+                    await _hud.ShowSimpleAsync(sample, options);
+                    break;
+                default:
+                    await _hud.ShowAndPlayAsync(sample, acOnline: true,
+                        HudPlayMode.Charge, options);
+                    break;
+            }
+        }
+        catch
+        {
+        }
+        finally
+        {
+            PreviewPlayBtn.IsEnabled = true;
+        }
     }
 
     // ---------------- 保存 ----------------
@@ -263,6 +385,32 @@ public partial class SettingsWindow : Window
         finally
         {
             CheckUpdateBtn.IsEnabled = true;
+        }
+    }
+
+    // ---------------- 字体安装 ----------------
+
+    private async void OnInstallFont(object? sender, RoutedEventArgs e)
+    {
+        FontInstallBtn.IsEnabled = false;
+        FontStatusText.Text = Localization.FontInstalling;
+
+        // Inter 字体 GitHub Releases 下载页
+        const string fontUrl = "https://github.com/rsms/inter/releases/latest";
+
+        try
+        {
+            Platform.Start(fontUrl);
+            await Task.Delay(500);
+            FontStatusText.Text = Localization.FontInstalled;
+        }
+        catch
+        {
+            FontStatusText.Text = Localization.UpdateCheckFailed;
+        }
+        finally
+        {
+            FontInstallBtn.IsEnabled = true;
         }
     }
 }

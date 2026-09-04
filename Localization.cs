@@ -26,6 +26,8 @@ public static class Localization
     // ---- HUD ----
     public static string TagLine => IsChinese ? "/// 超充模式" : "/// SUPER CHARGE MODE";
     public static string TitleMode => IsChinese ? "超充模式" : "Super Charge Mode";
+    public static string TagLineSaver => IsChinese ? "/// 省电模式" : "/// POWER SAVING MODE";
+    public static string TitleSaver => IsChinese ? "省电模式" : "Power Saving Mode";
 
     // ---- 托盘菜单 ----
     public static string PreviewHud => IsChinese ? "预览电量 HUD" : "Preview Power HUD";
@@ -55,6 +57,25 @@ public static class Localization
     public static string LabelLowBatteryEnable => IsChinese ? "启用低电量提醒" : "Enable Low Battery Alert";
     public static string LabelFullChargeEnable => IsChinese ? "充满时提醒" : "Alert When Fully Charged";
     public static string LabelVersion => IsChinese ? "版本" : "Version";
+    public static string LabelAuthor => IsChinese ? "作者" : "Author";
+
+    // ---- 动画页 ----
+    public static string TabAnimation => IsChinese ? "动画" : "Animation";
+    public static string SectionAnimParams => IsChinese ? "动画参数" : "Animation Parameters";
+    public static string SectionPreview => IsChinese ? "预览" : "Preview";
+    public static string LabelBounce => IsChinese ? "回弹强度" : "Bounce Strength";
+    public static string LabelRippleIntensity => IsChinese ? "波纹强度" : "Ripple Intensity";
+    public static string LabelRippleSpread => IsChinese ? "波纹幅度" : "Ripple Spread";
+    public static string LabelPlayMode => IsChinese ? "播放模式" : "Play Mode";
+    public static string ModePlug => IsChinese ? "插电（完整三态）" : "Plug In (Full Sequence)";
+    public static string ModeUnplug => IsChinese ? "拔电（简化胶囊）" : "Unplug (Simple Capsule)";
+    public static string ModeSaver => IsChinese ? "省电模式（完整三态）" : "Battery Saver (Full Sequence)";
+
+    // ---- 通知 ----
+    public static string LabelPowerSaverNotify => IsChinese ? "省电模式切换提示" : "Battery Saver Toggle Notify";
+    public static string PowerSaverNotifyDesc => IsChinese
+        ? "开启 / 关闭系统省电模式时显示 HUD"
+        : "Show HUD when battery saver is toggled";
     public static string LabelUpdateCheck => IsChinese ? "自动检查更新" : "Auto Check for Updates";
     public static string LabelAutoStart => IsChinese ? "开机自启" : "Auto Start";
     public static string BtnCheckUpdate => IsChinese ? "检查更新" : "Check Now";
@@ -81,9 +102,14 @@ public static class Localization
 
     // ---- 预览 ----
     public static string PreviewTitle => IsChinese ? "动画预览" : "Animation Preview";
-    public static string LabelPreviewScale => IsChinese ? "胶囊缩放" : "Pill Scale";
-    public static string LabelPreviewDuration => IsChinese ? "总时长" : "Total Duration";
-    public static string LabelPreviewBounce => IsChinese ? "回弹强度" : "Bounce Strength";
     public static string BtnPlay => IsChinese ? "播放" : "Play";
-    public static string BtnClose => IsChinese ? "关闭" : "Close";
+
+    // ---- 字体 ----
+    public static string FontSectionTitle => IsChinese ? "字体" : "Font";
+    public static string FontDesc => IsChinese
+        ? "HUD 数字与英文字体使用 Inter Medium，可获得更清晰的渲染效果"
+        : "HUD uses Inter Medium for digital and English text for sharper rendering";
+    public static string BtnInstallFont => IsChinese ? "安装 Inter 字体" : "Install Inter Font";
+    public static string FontInstalling => IsChinese ? "正在打开字体下载页…" : "Opening font download page...";
+    public static string FontInstalled => IsChinese ? "下载后双击 Inter.ttf 文件即可安装" : "Download and double-click Inter.ttf to install";
 }

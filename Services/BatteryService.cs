@@ -15,6 +15,14 @@ public sealed record BatterySnapshot(
     /// <summary>充/放电功率（瓦）。正=充电，负=放电；未知为 null。</summary>
     public double? RateWatts { get; init; }
 
+    /// <summary>设计容量（mWh），用于计算健康度。</summary>
+    public double? DesignCapacityWh { get; init; }
+
+    /// <summary>电池健康度百分比（当前满充容量 / 设计容量）。</summary>
+    public double? HealthPercent => DesignCapacityWh.HasValue && DesignCapacityWh.Value > 0
+        ? Math.Round(FullWh / DesignCapacityWh.Value * 100, 1)
+        : null;
+
     /// <summary>剩余时间估计；未知为 null。</summary>
     public TimeSpan? EstimatedRemaining { get; init; }
 
@@ -64,6 +72,7 @@ public static class BatteryService
             EstimatedRemaining = s.EstimatedTime is 0 or 0x80000000
                 ? null
                 : TimeSpan.FromSeconds(s.EstimatedTime),
+            // powrprof 不提供设计容量，健康度仅 WMI 路径可读
         };
         return true;
     }
@@ -80,6 +89,7 @@ public static class BatteryService
             {
                 int? pct = ReadUInt16(mo["EstimatedChargeRemaining"]);
                 uint? fullMwh = ReadUInt32(mo["FullChargeCapacity"]) ?? ReadUInt32(mo["DesignCapacity"]);
+                uint? designMwh = ReadUInt32(mo["DesignCapacity"]);
 
                 if (pct is null || fullMwh is 0 or null)
                     continue;
@@ -95,7 +105,12 @@ public static class BatteryService
                     FullWh: fullWh,
                     Percent: Math.Clamp(pct.Value, 0, 100),
                     AcOnline: status is 2 or 6 or 7 or 8 or 9,
-                    Charging: status is 2 or 6 or 7 or 8 or 9);
+                    Charging: status is 2 or 6 or 7 or 8 or 9)
+                {
+                    DesignCapacityWh = designMwh.HasValue && designMwh > 0
+                        ? designMwh.Value / 1000.0
+                        : null,
+                };
             }
         }
         catch

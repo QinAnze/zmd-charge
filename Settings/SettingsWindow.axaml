@@ -1,0 +1,316 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="560" d:DesignHeight="520"
+        x:Class="EndfieldCharge.Settings.SettingsWindow"
+        Title="EndfieldCharge · 设置"
+        Width="560" Height="520"
+        MinWidth="460" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="#1A1A1C"
+        Foreground="#E8E8E8"
+        FontFamily="HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- 标题栏 -->
+    <Border Grid.Row="0" Height="48" Background="#202022" Padding="20,0">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Border Width="18" Height="18" CornerRadius="4.5" Background="#C6CA4C" VerticalAlignment="Center" ClipToBounds="True">
+            <Image Width="14" Height="14" Source="avares://EndfieldCharge/Assets/tray_bolt.png"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <TextBlock x:Name="WinTitle" Text="设置"
+                     FontSize="16" FontWeight="SemiBold"
+                     VerticalAlignment="Center" Foreground="#F0F0F0"/>
+        </StackPanel>
+        <TextBlock Grid.Column="2" Text="EndfieldCharge" FontSize="11"
+                   Foreground="#888888" VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+
+    <!-- 主体 -->
+    <Grid Grid.Row="1" ColumnDefinitions="140,*">
+      <!-- 左侧 Tab -->
+      <Border Background="#18181A">
+        <StackPanel Margin="12,16,12,0" Spacing="4">
+          <Border x:Name="TabGeneralBtn" Tag="General"
+                  Height="38" CornerRadius="8" Padding="12,0"
+                  Background="#2A2A2D" Cursor="Hand">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock x:Name="TabGeneralText" Text="通用" FontSize="13"/>
+            </Grid>
+          </Border>
+          <Border x:Name="TabAnimationBtn" Tag="Animation"
+                  Height="38" CornerRadius="8" Padding="12,0"
+                  Background="Transparent" Cursor="Hand">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock x:Name="TabAnimationText" Text="动画" FontSize="13"/>
+            </Grid>
+          </Border>
+          <Border x:Name="TabNotificationsBtn" Tag="Notifications"
+                  Height="38" CornerRadius="8" Padding="12,0"
+                  Background="Transparent" Cursor="Hand">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock x:Name="TabNotificationsText" Text="通知" FontSize="13"/>
+            </Grid>
+          </Border>
+          <Border x:Name="TabAboutBtn" Tag="About"
+                  Height="38" CornerRadius="8" Padding="12,0"
+                  Background="Transparent" Cursor="Hand">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+              <TextBlock x:Name="TabAboutText" FontSize="13"/>
+            </Grid>
+          </Border>
+        </StackPanel>
+      </Border>
+
+      <!-- 右侧内容 -->
+      <Border Grid.Column="1" Background="#1A1A1C">
+        <ScrollViewer Margin="20,16,16,8">
+          <StackPanel x:Name="ContentPanel" Spacing="0">
+
+            <!-- 通用 Tab -->
+            <StackPanel x:Name="GeneralPanel" IsVisible="True" Spacing="0">
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionDisplayText" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelScale" Text="全局缩放" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="ScaleValue" Grid.Column="1" Text="0.80" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="ScaleSlider" Minimum="0.4" Maximum="1.2" TickFrequency="0.05"
+                            Value="0.8" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionPositionText" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <StackPanel Spacing="5">
+                    <TextBlock x:Name="LabelPosition" Text="HUD 位置" FontSize="12" Foreground="#888888"/>
+                    <ComboBox x:Name="PositionCombo" Height="32"/>
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock x:Name="LabelMonitor" Text="显示器" FontSize="12" Foreground="#888888"/>
+                    <ComboBox x:Name="MonitorCombo" Height="32"/>
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock x:Name="LabelLanguage" Text="语言" FontSize="12" Foreground="#888888"/>
+                    <ComboBox x:Name="LanguageCombo" Height="32"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionStartupText" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock x:Name="LabelAutoStart" Text="开机自启" FontSize="13"/>
+                      <TextBlock x:Name="DescAutoStartText" FontSize="11" Foreground="#888888"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="AutoStartSwitch" Grid.Column="1"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- 动画 Tab -->
+            <StackPanel x:Name="AnimationPanel" IsVisible="False" Spacing="0">
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionAnimParams" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelDuration" Text="显示时长（秒）" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="DurationValue" Grid.Column="1" Text="6.0s" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="DurationSlider" Minimum="3" Maximum="10" TickFrequency="0.5"
+                            Value="6" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelBounce" Text="回弹强度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="BounceValue" Grid.Column="1" Text="0.275" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="BounceSlider" Minimum="0" Maximum="0.5" TickFrequency="0.025"
+                            Value="0.275" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelRippleIntensity" Text="波纹强度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="RippleIntensityValue" Grid.Column="1" Text="1.00" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="RippleIntensitySlider" Minimum="0" Maximum="2" TickFrequency="0.05"
+                            Value="1" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelRippleSpread" Text="波纹幅度" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="RippleSpreadValue" Grid.Column="1" Text="1.00" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="RippleSpreadSlider" Minimum="0.5" Maximum="1.5" TickFrequency="0.05"
+                            Value="1" IsSnapToTickEnabled="False"/>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="14">
+                  <TextBlock x:Name="SectionPreview" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <StackPanel Spacing="5">
+                    <TextBlock x:Name="LabelPlayMode" Text="播放模式" FontSize="12" Foreground="#888888"/>
+                    <ComboBox x:Name="PreviewModeCombo" SelectedIndex="0" Height="32"/>
+                  </StackPanel>
+                  <Button x:Name="PreviewPlayBtn"
+                          Height="34" HorizontalAlignment="Stretch" Margin="0,4,0,0"
+                          Background="#C6CA4C" Foreground="#1A1A1C"
+                          FontWeight="SemiBold" FontSize="13"
+                          CornerRadius="8" Cursor="Hand"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- 通知 Tab -->
+            <StackPanel x:Name="NotificationsPanel" IsVisible="False" Spacing="0">
+              <Border Background="#262628" CornerRadius="10" Padding="16,14" Margin="0,0,0,14">
+                <StackPanel Spacing="18">
+                  <TextBlock x:Name="SectionAlertSettingsText" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock x:Name="LabelPowerSaverNotify" Text="省电模式切换提示" FontSize="13"/>
+                      <TextBlock x:Name="PowerSaverNotifyDesc"
+                                 FontSize="11" Foreground="#888888"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="PowerSaverSwitch" IsChecked="True" Grid.Column="1"/>
+                  </Grid>
+                  <Border Height="1" Background="#2A2A2C"/>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock x:Name="LabelLowBatteryEnable" Text="启用低电量提醒" FontSize="13"/>
+                      <TextBlock x:Name="DescLowBatteryAlertText" FontSize="11" Foreground="#888888"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="LowBatterySwitch" IsChecked="True" Grid.Column="1"/>
+                  </Grid>
+                  <StackPanel Spacing="5">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock x:Name="LabelLowBattery" Text="低电量提醒阈值" FontSize="12" Foreground="#888888"/>
+                      <TextBlock x:Name="LowBatteryValue" Grid.Column="1" Text="20%" FontSize="12"
+                                 Foreground="#888888" Width="40" TextAlignment="Right"/>
+                    </Grid>
+                    <Slider x:Name="LowBatterySlider" Minimum="5" Maximum="40" TickFrequency="5"
+                            Value="20" IsSnapToTickEnabled="True"/>
+                  </StackPanel>
+                  <Border Height="1" Background="#2A2A2C"/>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock x:Name="LabelFullChargeEnable" Text="充满时提醒" FontSize="13"/>
+                      <TextBlock x:Name="DescFullChargeAlertText" FontSize="11" Foreground="#888888"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="FullChargeSwitch" IsChecked="True" Grid.Column="1"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- 关于 Tab -->
+            <StackPanel x:Name="AboutPanel" IsVisible="False" Spacing="0">
+              <Border Background="#262628" CornerRadius="10" Padding="20,20" Margin="0,0,0,14">
+                <StackPanel Spacing="16" HorizontalAlignment="Center">
+                  <Border Width="48" Height="48" CornerRadius="12" Background="#2A2A2D"
+                          HorizontalAlignment="Center">
+                    <Image Width="28" Height="28"
+                           Source="avares://EndfieldCharge/Assets/tray_bolt.png"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <TextBlock Text="EndfieldCharge" FontSize="18" FontWeight="Bold"
+                             HorizontalAlignment="Center" Foreground="#F0F0F0"/>
+                  <TextBlock x:Name="AboutSubtitleText" FontSize="12"
+                             HorizontalAlignment="Center" Foreground="#888888"/>
+                  <Border Height="1" Background="#2A2A2C" Margin="0,4"/>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                    <TextBlock x:Name="LabelVersion" Text="版本" FontSize="12"
+                               Foreground="#888888" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="VersionText" Text="1.0.0" FontSize="13"
+                               FontWeight="SemiBold" Foreground="#F0F0F0"
+                               VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                    <TextBlock x:Name="LabelAuthor" Text="作者" FontSize="12"
+                               Foreground="#888888" VerticalAlignment="Center"/>
+                    <TextBlock Text="Lenkmat" FontSize="13"
+                               FontWeight="SemiBold" Foreground="#F0F0F0"
+                               VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <Border Height="1" Background="#2A2A2C" Margin="0,4"/>
+                  <Button x:Name="CheckUpdateBtn"
+                          Height="34" HorizontalAlignment="Stretch" Margin="0,4,0,0"
+                          Background="#2A2A2D" Foreground="#E0E0E0"
+                          BorderThickness="1" BorderBrush="#3A3A3C"
+                          CornerRadius="8"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                  <TextBlock x:Name="UpdateStatusText" FontSize="11"
+                             Foreground="#888888" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </Border>
+
+              <!-- 字体安装 -->
+              <Border Background="#262628" CornerRadius="10" Padding="20,16" Margin="0,0,0,14">
+                <StackPanel Spacing="12">
+                  <TextBlock x:Name="FontSectionTitle" FontSize="13" FontWeight="SemiBold"
+                             Foreground="#C6CA4C" LetterSpacing="1"/>
+                  <TextBlock x:Name="FontDescText"
+                             FontSize="12" Foreground="#888888" TextWrapping="Wrap"/>
+                  <Button x:Name="FontInstallBtn"
+                          Height="34" HorizontalAlignment="Stretch"
+                          Background="#2A2A2D" Foreground="#E0E0E0"
+                          BorderThickness="1" BorderBrush="#3A3A3C"
+                          CornerRadius="8"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                  <TextBlock x:Name="FontStatusText" FontSize="11"
+                             Foreground="#888888" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- 底部保存栏 -->
+    <Border Grid.Row="2" Height="56" Background="#202022" Padding="20,0">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock x:Name="SavedHint" Text="" FontSize="12" Foreground="#C6CA4C"
+                   VerticalAlignment="Center" Opacity="0"/>
+        <Button x:Name="SaveBtn" Grid.Column="2"
+                Height="34" Width="110"
+                HorizontalAlignment="Right"
+                Background="#C6CA4C" Foreground="#1A1A1C"
+                FontWeight="SemiBold" FontSize="13"
+                CornerRadius="8" Cursor="Hand"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

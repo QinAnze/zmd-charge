@@ -22,6 +22,13 @@ public sealed class PowerWatcher : IDisposable
     private const string ClassName = "EndfieldCharge_PowerMsgWindow";
     private const uint WmDestroy = 0x0002;
 
+    /// <summary>24H2（build 26100）起节能模式取代省电模式：
+    /// 只有 GUID_ENERGY_SAVER_STATUS 会推送真实状态，老 GUID_POWER_SAVING_STATUS
+    /// 与 SystemStatusFlag 均不再反映该开关（25H2 实测）。按版本分流，避免两个
+    /// GUID 的注册回执（各带一次当前状态）在启动时互相打架、误报状态变化。</summary>
+    private static readonly bool UseEnergySaverGuid =
+        Environment.OSVersion.Version.Build >= 26100;
+
     /// <summary>轮询兜底间隔。</summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
@@ -39,7 +46,10 @@ public sealed class PowerWatcher : IDisposable
     private uint _threadId;
     private IntPtr _hwnd;
     private IntPtr _acdcNotify;
+    private IntPtr _saverNotify;
+    private IntPtr _energySaverNotify;
     private bool? _lastAcOnline;
+    private bool? _lastSaverEnabled;
     private bool _initialized;
     private int _confirmSeq;
     private volatile bool _stopping;
@@ -53,6 +63,9 @@ public sealed class PowerWatcher : IDisposable
 
     /// <summary>电源来源变化。参数为当前是否交流电供电（true=已插电）。</summary>
     public event EventHandler<bool>? PowerSourceChanged;
+
+    /// <summary>省电模式开关变化。参数为省电模式是否开启（true=已开启）。</summary>
+    public event EventHandler<bool>? PowerSavingChanged;
 
     /// <summary>已启动并持有初始状态。</summary>
     public bool IsRunning => _thread is { IsAlive: true };
@@ -111,9 +124,23 @@ public sealed class PowerWatcher : IDisposable
             var guid = PowerNative.GuidAcdcPowerSource;
             _acdcNotify = PowerNative.RegisterPowerSettingNotification(
                 _hwnd, ref guid, PowerNative.DeviceNotifyWindowHandle);
+
+            var saverGuid = PowerNative.GuidPowerSavingStatus;
+            _saverNotify = PowerNative.RegisterPowerSettingNotification(
+                _hwnd, ref saverGuid, PowerNative.DeviceNotifyWindowHandle);
+
+            var esGuid = PowerNative.GuidEnergySaverStatus;
+            _energySaverNotify = PowerNative.RegisterPowerSettingNotification(
+                _hwnd, ref esGuid, PowerNative.DeviceNotifyWindowHandle);
+
+            Logger.Info($"PowerWatcher: hwnd=0x{_hwnd.ToInt64():X}, acdcNotify=0x{_acdcNotify.ToInt64():X}, saverNotify=0x{_saverNotify.ToInt64():X}, esNotify=0x{_energySaverNotify.ToInt64():X}");
+        }
+        else
+        {
+            Logger.Warn("PowerWatcher: message window create failed, only polling available");
         }
 
-        // ---- 记录初始状态：启动时已插电则不弹 ----
+        // ---- 记录初始状态：启动时已插电/已开省电则不弹 ----
         // 必须注册通知之后才能开始收事件，否则会在"还不知道当前状态"时
         // 就被某个事件拽到错误的初值上、然后下一次轮询又把它"修正"成真实值，
         // 看起来就像发生了一次状态变化 → 误触 HUD。
@@ -121,6 +148,11 @@ public sealed class PowerWatcher : IDisposable
         {
             _lastAcOnline = ac;
             _initialized = true;
+        }
+        if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+        {
+            _lastSaverEnabled = saver;
+            Logger.Info($"PowerWatcher: initial saver={saver}");
         }
 
         // ---- 轮询兜底定时器 ----
@@ -139,6 +171,16 @@ public sealed class PowerWatcher : IDisposable
             PowerNative.UnregisterPowerSettingNotification(_acdcNotify);
             _acdcNotify = IntPtr.Zero;
         }
+        if (_saverNotify != IntPtr.Zero)
+        {
+            PowerNative.UnregisterPowerSettingNotification(_saverNotify);
+            _saverNotify = IntPtr.Zero;
+        }
+        if (_energySaverNotify != IntPtr.Zero)
+        {
+            PowerNative.UnregisterPowerSettingNotification(_energySaverNotify);
+            _energySaverNotify = IntPtr.Zero;
+        }
         if (_hwnd != IntPtr.Zero)
         {
             PowerNative.DestroyWindow(_hwnd);
@@ -152,6 +194,13 @@ public sealed class PowerWatcher : IDisposable
         if (!PowerNative.TryGetAcOnline(out bool ac)) return;
         TraceEvent($"PollOnce ac={ac}");
         RaiseIfChanged(ac);
+
+        // 省电模式轮询兜底（部分机型不派发 GUID_POWER_SAVING_STATUS 通知）
+        if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+        {
+            TraceEvent($"PollOnce saver={saver}");
+            RaiseSaverIfChanged(saver);
+        }
     }
 
     private void RaiseIfChanged(bool acOnline)
@@ -206,6 +255,28 @@ public sealed class PowerWatcher : IDisposable
         PowerSourceChanged?.Invoke(this, candidate);
     }
 
+    /// <summary>
+    /// 省电模式状态变化：无确认延迟——开/关省电是用户或系统的明确动作，
+    /// 且轮询与通知双路径都以"与上次不同"为闸，不会重复触发。
+    /// </summary>
+    private void RaiseSaverIfChanged(bool enabled)
+    {
+        // 第一次读到真实状态前只记录，不上报（启动时已开省电不弹）
+        if (_lastSaverEnabled is null)
+        {
+            _lastSaverEnabled = enabled;
+            return;
+        }
+
+        if (_lastSaverEnabled == enabled)
+            return;
+
+        _lastSaverEnabled = enabled;
+        TraceEvent($"PowerSavingChanged(enabled={enabled})");
+        Logger.Info($"PowerWatcher: power saving { (enabled ? "ON" : "OFF") }");
+        PowerSavingChanged?.Invoke(this, enabled);
+    }
+
     [System.Diagnostics.Conditional("DEBUG")]
     private static void TraceEvent(string msg)
     {
@@ -238,6 +309,17 @@ public sealed class PowerWatcher : IDisposable
                     {
                         RaiseIfChanged(setting.Data == PowerNative.AcPowerSource);
                     }
+                    else if (setting.PowerSetting == PowerNative.GuidPowerSavingStatus
+                             && !UseEnergySaverGuid)
+                    {
+                        RaiseSaverIfChanged(setting.Data == 1);
+                    }
+                    else if (setting.PowerSetting == PowerNative.GuidEnergySaverStatus
+                             && UseEnergySaverGuid)
+                    {
+                        // 24H2+ 节能模式：0=关, 1=标准, 2=高节能（非 0 即开启）
+                        RaiseSaverIfChanged(setting.Data != 0);
+                    }
                 }
                 catch
                 {
@@ -249,6 +331,8 @@ public sealed class PowerWatcher : IDisposable
                 // 通用电源状态变化：重新读一次真实状态
                 if (PowerNative.TryGetAcOnline(out bool ac))
                     RaiseIfChanged(ac);
+                if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+                    RaiseSaverIfChanged(saver);
             }
         }
         else if (msg == WmDestroy)

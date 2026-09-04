@@ -6,9 +6,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- SettingsWindow 只在代码中带参构造，XAML 运行时加载器警告为误报 -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\tray_bolt.ico</ApplicationIcon>
     <AssemblyName>EndfieldCharge</AssemblyName>
     <RootNamespace>EndfieldCharge</RootNamespace>
+    <Authors>Lenkmat</Authors>
+    <Company>Lenkmat</Company>
+    <Copyright>Copyright © 2026 Lenkmat</Copyright>
     <PlatformTarget>x64</PlatformTarget>
     <!-- 单文件发布，方便丢进开机启动 -->
     <PublishSingleFile Condition="'$(Configuration)'=='Release'">true</PublishSingleFile>

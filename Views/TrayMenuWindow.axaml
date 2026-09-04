@@ -21,7 +21,7 @@
       <Border x:Name="MenuPreview" Tag="preview"
               Height="36" CornerRadius="6" Padding="12,0"
               Cursor="Hand" Background="Transparent">
-        <TextBlock x:Name="MenuPreviewText" Text="预览电量 HUD"
+        <TextBlock x:Name="MenuPreviewText"
                    FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
       </Border>
 
@@ -29,7 +29,7 @@
       <Border x:Name="MenuSettings" Tag="settings"
               Height="36" CornerRadius="6" Padding="12,0"
               Cursor="Hand" Background="Transparent">
-        <TextBlock x:Name="MenuSettingsText" Text="设置"
+        <TextBlock x:Name="MenuSettingsText"
                    FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
       </Border>
 
@@ -37,7 +37,7 @@
       <Border x:Name="MenuCheckUpdate" Tag="update"
               Height="36" CornerRadius="6" Padding="12,0"
               Cursor="Hand" Background="Transparent">
-        <TextBlock x:Name="MenuCheckUpdateText" Text="检查更新"
+        <TextBlock x:Name="MenuCheckUpdateText"
                    FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
       </Border>
 
@@ -48,7 +48,7 @@
       <Border x:Name="MenuExit" Tag="exit"
               Height="36" CornerRadius="6" Padding="12,0"
               Cursor="Hand" Background="Transparent">
-        <TextBlock x:Name="MenuExitText" Text="退出"
+        <TextBlock x:Name="MenuExitText"
                    FontSize="13" VerticalAlignment="Center" Foreground="#E8E8E8"/>
       </Border>
 

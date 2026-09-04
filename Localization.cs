@@ -55,9 +55,25 @@ public static class Localization
     public static string PosTopLeft => IsChinese ? "顶部靠左" : "Top Left";
     public static string LabelLowBattery => IsChinese ? "低电量提醒阈值" : "Low Battery Alert Threshold";
     public static string LabelLowBatteryEnable => IsChinese ? "启用低电量提醒" : "Enable Low Battery Alert";
-    public static string LabelFullChargeEnable => IsChinese ? "充满时提醒" : "Alert When Fully Charged";
+    public static string LabelFullChargeEnable => IsChinese ? "充满时提醒" : "Alert When Fully Charged";// ---- 设置窗口段落标题 ----
+    public static string SectionDisplay => IsChinese ? "显示" : "Display";
+    public static string SectionPosition => IsChinese ? "位置与语言" : "Position & Language";
+    public static string SectionStartup => IsChinese ? "启动" : "Startup";
+    public static string SectionAlertSettings => IsChinese ? "提醒设置" : "Alert Settings";
+    public static string DescAutoStart => IsChinese ? "登录 Windows 时自动启动" : "Auto start on Windows login";
+    public static string DescLowBatteryAlert => IsChinese ? "电量低于阈值时弹窗提醒" : "Alert when battery drops below threshold";
+    public static string DescFullChargeAlert => IsChinese ? "电池充满后弹窗通知" : "Notify when battery is fully charged";
+
+    // ---- 关于 ----
     public static string LabelVersion => IsChinese ? "版本" : "Version";
     public static string LabelAuthor => IsChinese ? "作者" : "Author";
+    public static string AboutSubtitle => IsChinese ? "终末地风格电量 HUD" : "Endfield-style Power HUD";
+
+    // ---- 显示器 ----
+    public static string MonitorName(int index, bool isPrimary) => IsChinese
+        ? isPrimary ? $"显示器 {index + 1}（主）" : $"显示器 {index + 1}"
+        : isPrimary ? $"Monitor {index + 1} (Primary)" : $"Monitor {index + 1}";
+    public static string MonitorDefault => IsChinese ? "默认" : "Default";
 
     // ---- 动画页 ----
     public static string TabAnimation => IsChinese ? "动画" : "Animation";

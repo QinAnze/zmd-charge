@@ -144,18 +144,27 @@ public partial class SettingsWindow : Window
         LabelMonitor.Text = Localization.LabelMonitor;
         LabelLanguage.Text = Localization.LabelLanguage;
         LabelAutoStart.Text = Localization.LabelAutoStart;
+        DescAutoStartText.Text = Localization.DescAutoStart;
         LabelLowBatteryEnable.Text = Localization.LabelLowBatteryEnable;
+        DescLowBatteryAlertText.Text = Localization.DescLowBatteryAlert;
         LabelLowBattery.Text = Localization.LabelLowBattery;
         LabelFullChargeEnable.Text = Localization.LabelFullChargeEnable;
+        DescFullChargeAlertText.Text = Localization.DescFullChargeAlert;
         LabelPowerSaverNotify.Text = Localization.LabelPowerSaverNotify;
         PowerSaverNotifyDesc.Text = Localization.PowerSaverNotifyDesc;
         LabelVersion.Text = Localization.LabelVersion;
         LabelAuthor.Text = Localization.LabelAuthor;
         SaveBtn.Content = Localization.BtnSave;
         CheckUpdateBtn.Content = Localization.BtnCheckUpdate;
+        AboutSubtitleText.Text = Localization.AboutSubtitle;
+        FontSectionTitle.Text = Localization.FontSectionTitle;
         FontDescText.Text = Localization.FontDesc;
         FontInstallBtn.Content = Localization.BtnInstallFont;
 
+        SectionDisplayText.Text = Localization.SectionDisplay;
+        SectionPositionText.Text = Localization.SectionPosition;
+        SectionStartupText.Text = Localization.SectionStartup;
+        SectionAlertSettingsText.Text = Localization.SectionAlertSettings;
         SectionAnimParams.Text = Localization.SectionAnimParams;
         SectionPreview.Text = Localization.SectionPreview;
         LabelBounce.Text = Localization.LabelBounce;
@@ -195,14 +204,15 @@ public partial class SettingsWindow : Window
         for (int i = 0; i < screens.Count; i++)
         {
             var s = screens[i];
-            var name = s.IsPrimary
-                ? $"显示器 {i + 1}（主）"
-                : $"显示器 {i + 1}";
-            MonitorCombo.Items.Add(new ComboBoxItem { Content = name, Tag = i });
+            MonitorCombo.Items.Add(new ComboBoxItem
+            {
+                Content = Localization.MonitorName(i, s.IsPrimary),
+                Tag = i,
+            });
         }
 
         if (MonitorCombo.Items.Count == 0)
-            MonitorCombo.Items.Add(new ComboBoxItem { Content = "默认", Tag = 0 });
+            MonitorCombo.Items.Add(new ComboBoxItem { Content = Localization.MonitorDefault, Tag = 0 });
     }
 
     // ---------------- 加载 / 收集 ----------------
@@ -235,8 +245,6 @@ public partial class SettingsWindow : Window
 
         VersionText.Text = GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
-        FontDescText.Text = Localization.FontDesc;
-        FontInstallBtn.Content = Localization.BtnInstallFont;
         FontStatusText.Text = string.Empty;
     }
 

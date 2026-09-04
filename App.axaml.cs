@@ -24,7 +24,6 @@ public partial class App : Application
 
     private AppSettings _settings = new();
     private SystemLoadService? _load;
-    private ChargeModeService? _charge;
 
     /// <summary>是否按台式机处理（读不到电池）。决定显示功耗模式还是电量模式。</summary>
     private bool _isDesktop;
@@ -43,7 +42,6 @@ public partial class App : Application
             desktop.Exit += OnDesktopExit;
 
             _settings = AppSettings.Load();
-            _charge = new ChargeModeService(_settings);
 
             // 设备类型：WMI PCSystemType 标准判定（读不到时回退电池判定）
             _isDesktop = DeviceInfo.IsDesktop();
@@ -54,7 +52,7 @@ public partial class App : Application
 
             _load = new SystemLoadService();
 
-            _hud = new HudWindow();
+            _hud = new HudWindow(() => _load?.Current);
 
             SetupTrayIcon(desktop);
             StartPowerWatching();
@@ -135,12 +133,6 @@ public partial class App : Application
                 sb.AppendLine($"  剩余     : {battery.RemainingWh:F1} / {battery.FullWh:F1} Wh ({battery.Percent}%)");
                 sb.AppendLine($"  状态     : {(battery.AcOnline ? "已插电" : "电池供电")}{(battery.Charging ? " (充电中)" : "")}");
                 sb.AppendLine($"  充电功率 : {(battery.RateWatts.HasValue ? battery.RateWatts.Value.ToString("F1") + " W" : "未知")}");
-                string tier = battery.RateWatts.HasValue
-                    ? (battery.RateWatts.Value >= ChargeModeService.FastThresholdWatts
-                        ? $"Fast (≥{ChargeModeService.FastThresholdWatts:F0}W 阈值)"
-                        : $"Normal (<{ChargeModeService.FastThresholdWatts:F0}W)")
-                    : "未知 (无速率数据)";
-                sb.AppendLine($"  充电器档 : {tier}");
             }
 
             sb.AppendLine();
@@ -171,14 +163,8 @@ public partial class App : Application
             ? SystemLoadSnapshot.Empty
             : freshLoad ? _load.Sample() : _load.Current;
 
-        var mode = _charge?.Update(battery) ?? ChargeMode.Unknown;
-
-        // 刚插上还没有速率数据时，用上次记录的档位兜底（没有历史就保守给慢充）
-        if (mode == ChargeMode.Unknown && _charge is not null)
-            mode = _charge.InitialGuess();
-
         return full
-            ? HudContentFactory.CreateFull(battery, load, mode)
+            ? HudContentFactory.CreateFull(battery, load)
             : HudContentFactory.CreateSimple(battery, load);
     }
 
@@ -201,12 +187,15 @@ public partial class App : Application
             MemoryPercent: 40d,
             GpuPercent: 8d,
             LoadPercent: SystemLoadService.ComputeLoad(12d, 40d, 8d),
-            Watts: 68.4d);
+            Watts: 68.4d,
+            DiskPercent: 3d,
+            NetUpKBs: 12d,
+            NetDownKBs: 340d);
 
         // 强制台式机时走功耗模式，否则用示例电池数据
         var content = _isDesktop
-            ? HudContentFactory.CreateFull(null, demoLoad, ChargeMode.Unknown)
-            : HudContentFactory.CreateFull(sample, demoLoad, ChargeMode.Fast);
+            ? HudContentFactory.CreateFull(null, demoLoad)
+            : HudContentFactory.CreateFull(sample, demoLoad);
 
         await _hud.ShowFullAsync(content);
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Net.NetworkInformation;
 using System.Runtime.Versioning;
 using System.Threading;
 
@@ -13,9 +14,12 @@ public sealed record SystemLoadSnapshot(
     double MemoryPercent,
     double? GpuPercent,
     double LoadPercent,
-    double? Watts)
+    double? Watts,
+    double? DiskPercent,
+    double NetUpKBs,
+    double NetDownKBs)
 {
-    public static readonly SystemLoadSnapshot Empty = new(0d, 0d, null, 0d, null);
+    public static readonly SystemLoadSnapshot Empty = new(0d, 0d, null, 0d, null, null, 0d, 0d);
 
     /// <summary>GPU 占用率是否可用（不可用时权重已按 CPU : 内存 原比例重分配）。</summary>
     public bool GpuAvailable => GpuPercent.HasValue;
@@ -89,18 +93,78 @@ public sealed class SystemLoadService : IDisposable
         // 真实功率 = 各路传感器之和；一路都没有就是 null（不估算）
         double? watts = s.HasPower ? (s.CpuWatts ?? 0d) + (s.GpuWatts ?? 0d) : null;
 
+        (double upKBs, double downKBs) = ReadNetwork();
+
         var snap = new SystemLoadSnapshot(
             CpuPercent: cpu,
             MemoryPercent: mem,
             GpuPercent: gpu,
             LoadPercent: ComputeLoad(cpu, mem, gpu),
-            Watts: watts);
+            Watts: watts,
+            DiskPercent: s.DiskLoad is null ? null : Math.Clamp(s.DiskLoad.Value, 0d, 100d),
+            NetUpKBs: upKBs,
+            NetDownKBs: downKBs);
 
         lock (_gate)
         {
             _current = snap;
         }
         return snap;
+    }
+
+    // ---------------- 网络速率（.NET 标准 NetworkInterface 统计差分） ----------------
+
+    private long _prevBytesSent;
+    private long _prevBytesReceived;
+    private bool _hasPrevNet;
+    private double _upKBs;
+    private double _downKBs;
+
+    /// <summary>
+    /// 汇总所有在线物理网卡的收发字节数，与上次采样差分算速率（KB/s，含 IPv4+IPv6）。
+    /// 指数平滑滤毛刺；首次采样只有基准，返回 0。
+    /// </summary>
+    private (double Up, double Down) ReadNetwork()
+    {
+        long sent = 0, recv = 0;
+        try
+        {
+            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up)
+                    continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                    ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                    continue;
+
+                IPInterfaceStatistics st = ni.GetIPStatistics();
+                sent += st.BytesSent;
+                recv += st.BytesReceived;
+            }
+        }
+        catch
+        {
+            return (_upKBs, _downKBs);   // 枚举失败沿用上次平滑值
+        }
+
+        if (!_hasPrevNet)
+        {
+            _prevBytesSent = sent;
+            _prevBytesReceived = recv;
+            _hasPrevNet = true;
+            return (0d, 0d);
+        }
+
+        double seconds = SampleInterval.TotalSeconds;
+        double up = Math.Max(0d, sent - _prevBytesSent) / 1024d / seconds;
+        double down = Math.Max(0d, recv - _prevBytesReceived) / 1024d / seconds;
+        _prevBytesSent = sent;
+        _prevBytesReceived = recv;
+
+        const double alpha = 0.5;
+        _upKBs += alpha * (up - _upKBs);
+        _downKBs += alpha * (down - _downKBs);
+        return (_upKBs, _downKBs);
     }
 
     /// <summary>

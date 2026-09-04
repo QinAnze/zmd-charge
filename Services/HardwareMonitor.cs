@@ -9,10 +9,11 @@ public sealed record HardwareSample(
     double? CpuLoad,
     double? MemoryLoad,
     double? GpuLoad,
+    double? DiskLoad,
     double? CpuWatts,
     double? GpuWatts)
 {
-    public static readonly HardwareSample Empty = new(null, null, null, null, null);
+    public static readonly HardwareSample Empty = new(null, null, null, null, null, null);
 
     /// <summary>是否读到了至少一路真实功率。</summary>
     public bool HasPower => CpuWatts.HasValue || GpuWatts.HasValue;
@@ -34,6 +35,7 @@ public sealed class HardwareMonitor : IDisposable
         IsCpuEnabled = true,
         IsMemoryEnabled = true,
         IsGpuEnabled = true,
+        IsStorageEnabled = true,   // 硬盘活动率（性能面板用）
     };
 
     private readonly object _gate = new();
@@ -118,7 +120,7 @@ public sealed class HardwareMonitor : IDisposable
 
     private HardwareSample Read()
     {
-        double? cpuLoad = null, memLoad = null, gpuLoad = null, cpuWatts = null, gpuWatts = null;
+        double? cpuLoad = null, memLoad = null, gpuLoad = null, diskLoad = null, cpuWatts = null, gpuWatts = null;
 
         foreach (IHardware hw in _computer.Hardware)
         {
@@ -139,10 +141,15 @@ public sealed class HardwareMonitor : IDisposable
                     gpuLoad ??= PickLoad(hw, "GPU Core", "GPU Total", "D3D 3D", "3D");
                     gpuWatts ??= PickPower(hw, "power", "package", "ppt");
                     break;
+
+                case HardwareType.Storage:
+                    // 磁盘活动率（%）：NVMe / SATA 控制器上报的 Activity
+                    diskLoad ??= PickLoad(hw, "Activity");
+                    break;
             }
         }
 
-        return new HardwareSample(cpuLoad, memLoad, gpuLoad, cpuWatts, gpuWatts);
+        return new HardwareSample(cpuLoad, memLoad, gpuLoad, diskLoad, cpuWatts, gpuWatts);
     }
 
     /// <summary>

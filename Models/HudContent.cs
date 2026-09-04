@@ -41,11 +41,9 @@ public static class HudContentFactory
     /// </summary>
     /// <param name="battery">电池快照；台式机为 null。</param>
     /// <param name="load">系统负载快照。</param>
-    /// <param name="charge">充电器档位。</param>
     public static HudContent CreateFull(
         BatterySnapshot? battery,
-        SystemLoadSnapshot load,
-        ChargeMode charge)
+        SystemLoadSnapshot load)
     {
         // ---- 台式机 / 读不到电池：功耗模式 ----
         if (battery is null || !battery.HasBattery)
@@ -60,13 +58,11 @@ public static class HudContentFactory
                 RingDanger: load.LoadPercent >= LoadDangerPercent);
         }
 
-        // ---- 笔记本：按充电器档位给标题 ----
-        bool fast = charge == ChargeMode.Fast;
-
+        // ---- 笔记本：统一显示充电模式（不再区分快慢充，避免歧义） ----
         return new HudContent(
             Mode: HudMode.Battery,
-            Title: fast ? "超充模式" : "充电模式",
-            Caption: fast ? "/// SUPER CHARGE MODE" : "/// CHARGE MODE",
+            Title: "充电模式",
+            Caption: "/// CHARGE MODE",
             Primary: (battery.RemainingWh * 1000).ToString("F0"),
             Unit: $"/{battery.FullWh * 1000:F0}",
             RingPercent: battery.Percent,

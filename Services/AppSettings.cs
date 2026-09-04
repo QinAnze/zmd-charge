@@ -19,12 +19,6 @@ public sealed class AppSettings
     /// <summary>常驻模式：开机即显示且不再自动收起，只能从托盘退出。</summary>
     public bool ResidentMode { get; set; }
 
-    /// <summary>上次判定到的充电器是快充（用于下次插入时立刻定档）。</summary>
-    public bool LastChargerFast { get; set; }
-
-    /// <summary>上次充电会话观测到的峰值充电功率（瓦），用于判定的可参考上界。</summary>
-    public double LastChargerPeakWatts { get; set; }
-
     private static string FilePath =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

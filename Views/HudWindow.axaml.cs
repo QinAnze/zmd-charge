@@ -23,9 +23,12 @@ namespace EndfieldCharge.Views;
 /// 左侧小胶囊（数字 + 徽章）→ 停留数秒 → 收尾关掉。
 ///
 /// 两种显示模式：
-///   · 弹出模式（默认）：播完就收起；点击可提前关掉。
-///   · 常驻模式：播完停在末态不收起，数据持续刷新，点击也不关，
+///   · 弹出模式（默认）：播完就收起。
+///   · 常驻模式：播完停在末态不收起，数据持续刷新，
 ///     只有调用 <see cref="StopResident"/>（托盘退出）才会消失。
+///
+/// 点击圆胶囊 → 打开性能面板（CPU/GPU/内存/硬盘/上传/下载），
+/// 再点一下 → 回到电量显示（非常驻模式随即收起）。
 /// </summary>
 public partial class HudWindow : Window
 {
@@ -35,6 +38,9 @@ public partial class HudWindow : Window
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan RepositionInterval = TimeSpan.FromSeconds(5);
 
+    // 性能面板的刷新间隔
+    private static readonly TimeSpan PanelRefreshInterval = TimeSpan.FromMilliseconds(500);
+
     // 徽章圆环颜色：正常黄绿，告警红（低电量 / 高负载）
     private static readonly Color BadgeColorNormal = Color.Parse("#C6CA4C");
     private static readonly Color BadgeColorDanger = Color.Parse("#FF4D4F");
@@ -43,21 +49,28 @@ public partial class HudWindow : Window
 
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _repositionTimer;
+    private DispatcherTimer? _panelTimer;
     private Func<HudContent>? _contentProvider;
+    private Func<SystemLoadSnapshot?>? _perfProvider;
     private bool _resident;
+    private bool _panelOpen;
+    private bool _panelBusy;   // 形变动画进行中（防止两条形变轨道打架）
 
-    public HudWindow()
+    /// <summary>无参构造：XAML 运行时加载器需要（AVLN3001 / CI TreatWarningsAsErrors）。</summary>
+    public HudWindow() : this(null)
+    {
+    }
+
+    public HudWindow(Func<SystemLoadSnapshot?>? perfProvider)
     {
         InitializeComponent();
 
+        _perfProvider = perfProvider;
+
         Cursor = new Cursor(StandardCursorType.Hand);
 
-        // 常驻模式下点一下不能把它关掉（常驻的定义就是"只有退出/关机才消失"）
-        PointerPressed += (_, _) =>
-        {
-            if (!_resident)
-                _ = DismissAsync();
-        };
+        // 点击圆胶囊 ⇄ 性能面板（弹出 / 常驻模式行为一致）
+        PointerPressed += (_, _) => TogglePanel();
 
         ResetToInitial();
     }
@@ -72,6 +85,7 @@ public partial class HudWindow : Window
     public async Task ShowSimpleAsync(HudContent content)
     {
         ApplyContent(content);
+        ResetPanel();   // 新一轮播放前把性能面板收干净
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -124,6 +138,7 @@ public partial class HudWindow : Window
         _contentProvider = null;
 
         StopResidentTimers();
+        ResetPanel();
 
         _cts?.Cancel();
         if (IsVisible)
@@ -142,6 +157,7 @@ public partial class HudWindow : Window
     private async Task PlayAsync(HudContent content, bool resident)
     {
         ApplyContent(content);
+        ResetPanel();   // 新一轮播放前把性能面板收干净
 
         // 打断上一次播放
         _cts?.Cancel();
@@ -269,6 +285,115 @@ public partial class HudWindow : Window
         await fade.RunAsync(Root);
         Hide();
     }
+
+    // ---------------- 性能面板（点击圆胶囊 ⇄ 形变为圆角矩形） ----------------
+
+    private void TogglePanel()
+    {
+        if (_panelBusy)
+            return;   // 形变进行中不响应，防止两条形变轨道打架
+
+        if (_panelOpen)
+            _ = ClosePanelAsync();
+        else
+            _ = OpenPanelAsync();
+    }
+
+    /// <summary>圆胶囊形变为圆角矩形（高 60→90、圆角 30→18），面板内容随后浮现。</summary>
+    private async Task OpenPanelAsync()
+    {
+        _panelBusy = true;
+        _panelOpen = true;
+
+        // 打断正在播的动画 / 待收起流程，把胶囊拨到圆胶囊态，从它开始形变
+        _cts?.Cancel();
+        Root.Opacity = 1;
+        ShowFullyExpandedStatic();
+        NumHost.Opacity = 0;          // 电量内容让位
+
+        PerfPanel.IsVisible = true;
+        UpdatePerfPanel();
+        StartPanelTimer();
+
+        try
+        {
+            await Task.WhenAll(
+                HudAnimations.PanelExpand().RunAsync(Pill),
+                HudAnimations.PanelFadeIn().RunAsync(PerfPanel));
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新一轮播放打断，状态交由后续流程接管
+        }
+        _panelBusy = false;
+    }
+
+    /// <summary>圆角矩形形变回圆胶囊，回到电量显示；非常驻模式随即收起。</summary>
+    private async Task ClosePanelAsync()
+    {
+        _panelBusy = true;
+        _panelOpen = false;
+        StopPanelTimer();
+        NumHost.Opacity = 1;          // 电量内容先回来
+
+        try
+        {
+            await Task.WhenAll(
+                HudAnimations.PanelContract().RunAsync(Pill),
+                HudAnimations.PanelFadeOut().RunAsync(PerfPanel));
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新一轮播放打断
+        }
+
+        PerfPanel.IsVisible = false;
+        _panelBusy = false;
+
+        if (!_resident)
+            await DismissAsync();
+    }
+
+    /// <summary>把面板与形变状态收干净（新一轮播放 / 退出常驻前调用）。</summary>
+    private void ResetPanel()
+    {
+        _panelOpen = false;
+        _panelBusy = false;
+        StopPanelTimer();
+        PerfPanel.IsVisible = false;
+        PerfPanel.Opacity = 1;        // 抵消 FadeOut 的 FillMode.Forward 残留
+    }
+
+    private void StartPanelTimer()
+    {
+        StopPanelTimer();
+        _panelTimer = new DispatcherTimer(
+            PanelRefreshInterval, DispatcherPriority.Normal, (_, _) => UpdatePerfPanel());
+        _panelTimer.Start();
+    }
+
+    private void StopPanelTimer()
+    {
+        _panelTimer?.Stop();
+        _panelTimer = null;
+    }
+
+    private void UpdatePerfPanel()
+    {
+        SystemLoadSnapshot? s = _perfProvider?.Invoke();
+        if (s is null)
+            return;
+
+        PerfCpu.Text = $"{s.CpuPercent:F0} %";
+        PerfGpu.Text = s.GpuPercent is { } gpu ? $"{gpu:F0} %" : "--";
+        PerfMem.Text = $"{s.MemoryPercent:F0} %";
+        PerfDisk.Text = s.DiskPercent is { } disk ? $"{disk:F0} %" : "--";
+        PerfUp.Text = FormatSpeed(s.NetUpKBs);
+        PerfDown.Text = FormatSpeed(s.NetDownKBs);
+    }
+
+    private static string FormatSpeed(double kbs) =>
+        kbs >= 1024d ? $"{kbs / 1024d:F1} MB/s" : $"{kbs:F0} KB/s";
 
     // ---------------- 数据绑定（直接赋值，无 MVVM 开销） ----------------
 

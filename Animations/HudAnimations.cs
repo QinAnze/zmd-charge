@@ -275,6 +275,55 @@ internal static class HudAnimations
         FillMode = FillMode.Forward,
     };
 
+    // ---------------- 性能面板（点击圆胶囊 ⇄ 圆角矩形） ----------------
+    // 形变规格与三态 A→B / B→C 完全一致：横向 560 恒定，高 60↔90，圆角 30↔18，快速过渡。
+
+    public static readonly TimeSpan PanelMorph = TimeSpan.FromSeconds(0.36);
+
+    /// <summary>圆胶囊 → 圆角矩形：高 60→90、圆角 30→18。</summary>
+    public static Animation PanelExpand()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, H(PillHeightA), CR(PillRadiusA)));
+        a.Children.Add(KF(1d, KS_InOut, H(PillHeightB), CR(PillRadiusB)));
+        return a;
+    }
+
+    /// <summary>圆角矩形 → 圆胶囊：高 90→60、圆角 18→30。</summary>
+    public static Animation PanelContract()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, H(PillHeightB), CR(PillRadiusB)));
+        a.Children.Add(KF(1d, KS_InOut, H(PillHeightA), CR(PillRadiusA)));
+        return a;
+    }
+
+    /// <summary>面板内容淡入：等形变过半再出现，避免内容跟着 60 高的小胶囊挤出边界。</summary>
+    public static Animation PanelFadeIn()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(0)));
+        a.Children.Add(KF(0.45d, KS_In, Op(0)));
+        a.Children.Add(KF(1d, KS_Out, Op(1)));
+        return a;
+    }
+
+    /// <summary>面板内容淡出：先保持，随收缩一起淡出。</summary>
+    public static Animation PanelFadeOut()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(1)));
+        a.Children.Add(KF(0.5d, KS_In, Op(1)));
+        a.Children.Add(KF(1d, KS_Out, Op(0)));
+        return a;
+    }
+
+    private static Animation NewPanel() => new()
+    {
+        Duration = PanelMorph,
+        FillMode = FillMode.Forward,
+    };
+
     // ---------------- 构造辅助 ----------------
 
     private static Animation New() => new()

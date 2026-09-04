@@ -101,6 +101,8 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         name: EndfieldCharge ${{ steps.ver.outputs.version }}
+        # 带 - 的版本号（如 v1.2.0-dev）按语义化版本惯例标记为预发布
+        prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
         generate_release_notes: true
         files: |
           installer\Output\*.exe

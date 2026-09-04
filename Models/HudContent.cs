@@ -58,11 +58,13 @@ public static class HudContentFactory
                 RingDanger: load.LoadPercent >= LoadDangerPercent);
         }
 
-        // ---- 笔记本：统一显示充电模式（不再区分快慢充，避免歧义） ----
+        // ---- 笔记本：按当前供电状态给标题（插电 = 充电模式，电池 = 电池模式） ----
+        bool ac = battery.AcOnline;
+
         return new HudContent(
             Mode: HudMode.Battery,
-            Title: "充电模式",
-            Caption: "/// CHARGE MODE",
+            Title: ac ? "充电模式" : "电池模式",
+            Caption: ac ? "/// CHARGE MODE" : "/// BATTERY MODE",
             Primary: (battery.RemainingWh * 1000).ToString("F0"),
             Unit: $"/{battery.FullWh * 1000:F0}",
             RingPercent: battery.Percent,

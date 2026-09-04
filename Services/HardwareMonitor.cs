@@ -137,14 +137,24 @@ public sealed class HardwareMonitor : IDisposable
                 case HardwareType.GpuNvidia:
                 case HardwareType.GpuAmd:
                 case HardwareType.GpuIntel:
-                    gpuLoad ??= PickLoad(hw, "GPU Core", "GPU Total", "D3D 3D", "3D");
-                    gpuWatts ??= PickPower(hw, "power", "package", "ppt");
+                    // 多显卡：占用取瞬时最大的一块（用户视角的"显卡占用"），
+                    // 功率求和（物理总量，两块都在耗电）
+                    gpuLoad = Max(gpuLoad, PickLoad(hw, "GPU Core", "GPU Total", "D3D 3D", "3D"));
+                    gpuWatts = Sum(gpuWatts, PickPower(hw, "power", "package", "ppt"));
                     break;
             }
         }
 
         return new HardwareSample(cpuLoad, memLoad, gpuLoad, cpuWatts, gpuWatts);
     }
+
+    /// <summary>双可空数取较大者（任一为 null 取另一个，都 null 返回 null）。</summary>
+    private static double? Max(double? a, double? b) =>
+        a.HasValue && b.HasValue ? Math.Max(a.Value, b.Value) : a ?? b;
+
+    /// <summary>双可空数求和（任一为 null 取另一个，都 null 返回 null）。</summary>
+    private static double? Sum(double? a, double? b) =>
+        a.HasValue && b.HasValue ? a.Value + b.Value : a ?? b;
 
     /// <summary>
     /// 按名称关键词挑占用率传感器。各平台命名不同（NVIDIA "GPU Core"、

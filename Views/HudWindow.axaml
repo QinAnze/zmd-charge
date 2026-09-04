@@ -154,8 +154,8 @@
                         Data="{DynamicResource Geo.Bolt}"
                         Foreground="#FF141313"/>
               <PathIcon x:Name="SquarePerfIcon"
-                        Width="11" Height="11"
-                        Data="{DynamicResource Geo.ChipPins}"
+                        Width="12" Height="12"
+                        Data="{DynamicResource Geo.PerfBars}"
                         Foreground="#FF141313"
                         IsVisible="False"/>
             </Panel>

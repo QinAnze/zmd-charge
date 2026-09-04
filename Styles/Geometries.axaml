@@ -19,4 +19,7 @@
        封装体与内芯由 Border 绘制（便于随状态换色），这里只画四根引脚 -->
   <StreamGeometry x:Key="Geo.ChipPins">M5 8 H2 V10 H5 Z M5 14 H2 V16 H5 Z M19 8 H22 V10 H19 Z M19 14 H22 V16 H19 Z</StreamGeometry>
 
+  <!-- 性能柱状：三根递增实心柱（负载/性能仪表），小尺寸下比引脚轮廓清晰得多 -->
+  <StreamGeometry x:Key="Geo.PerfBars">M4 13 H8 V20 H4 Z M10 8 H14 V20 H10 Z M16 3 H20 V20 H16 Z</StreamGeometry>
+
 </ResourceDictionary>

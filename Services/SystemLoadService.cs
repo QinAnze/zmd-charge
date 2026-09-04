@@ -115,20 +115,24 @@ public sealed class SystemLoadService : IDisposable
         return snap;
     }
 
-    // ---------------- 硬盘速度（C 盘所在物理盘，PhysicalDisk 性能计数器） ----------------
+    // ---------------- 硬盘速度（瞬时占用最大的物理盘，PhysicalDisk 性能计数器） ----------------
 
     /// <summary>
-    /// 读 <b>C 盘所在物理盘</b>的读写速度（MB/s，读 + 写）。
-    /// PhysicalDisk 性能计数器的实例名自带盘符映射（如 "0 C:" 或 "0 C: D:"），
-    /// 这是 Windows 标准、且唯一可靠的"盘符 → 物理盘"对应方式。
+    /// 读"当前最忙物理盘"的读写速度（MB/s，读 + 写）。
+    /// 多硬盘机器上监控所有 PhysicalDisk 实例（剔除 _Total），
+    /// 每次采样按瞬时磁盘占用（% Disk Time）挑出占用最大的一块，显示它的速度。
     /// 首次枚举实例较慢，放后台；读不到（权限 / 实例缺失）返回 null。
     /// </summary>
     private sealed class DiskProbe
     {
         private const double BytesPerMB = 1024d * 1024d;
 
-        private PerformanceCounter? _read;
-        private PerformanceCounter? _write;
+        private sealed record DiskCounters(
+            PerformanceCounter DiskTime,
+            PerformanceCounter Read,
+            PerformanceCounter Write);
+
+        private readonly List<DiskCounters> _disks = new();
         private volatile bool _ready;
         private int _failures;
 
@@ -138,20 +142,28 @@ public sealed class SystemLoadService : IDisposable
             {
                 try
                 {
-                    string? instance = new PerformanceCounterCategory("PhysicalDisk")
-                        .GetInstanceNames()
-                        .FirstOrDefault(n => n.Contains("C:", StringComparison.OrdinalIgnoreCase));
+                    var category = new PerformanceCounterCategory("PhysicalDisk");
 
-                    if (instance is null)
-                        return;
+                    foreach (string instance in category.GetInstanceNames())
+                    {
+                        // "_Total" 是所有盘的合计，无法代表单块盘，剔除
+                        if (instance.Equals("_Total", StringComparison.OrdinalIgnoreCase))
+                            continue;
 
-                    _read = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", instance, readOnly: true);
-                    _write = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", instance, readOnly: true);
+                        var counters = new DiskCounters(
+                            DiskTime: new PerformanceCounter("PhysicalDisk", "% Disk Time", instance, readOnly: true),
+                            Read: new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", instance, readOnly: true),
+                            Write: new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", instance, readOnly: true));
 
-                    // 速率型计数器首读返回 0，预热一次
-                    _read.NextValue();
-                    _write.NextValue();
-                    _ready = true;
+                        // 速率型计数器首读返回 0，预热一次
+                        counters.DiskTime.NextValue();
+                        counters.Read.NextValue();
+                        counters.Write.NextValue();
+
+                        _disks.Add(counters);
+                    }
+
+                    _ready = _disks.Count > 0;
                 }
                 catch
                 {
@@ -167,9 +179,27 @@ public sealed class SystemLoadService : IDisposable
 
             try
             {
-                double mbs = (_read!.NextValue() + _write!.NextValue()) / BytesPerMB;
+                double bestTime = -1d;
+                double bestMbs = 0d;
+
+                foreach (var d in _disks)
+                {
+                    double time = d.DiskTime.NextValue();
+                    if (time > bestTime)
+                    {
+                        bestTime = time;
+                        bestMbs = (d.Read.NextValue() + d.Write.NextValue()) / BytesPerMB;
+                    }
+                    else
+                    {
+                        // 不是最忙的盘也要读一次，保持计数器采样节奏连续
+                        d.Read.NextValue();
+                        d.Write.NextValue();
+                    }
+                }
+
                 _failures = 0;
-                return mbs;
+                return bestMbs;
             }
             catch
             {

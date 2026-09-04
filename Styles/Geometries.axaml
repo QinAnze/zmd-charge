@@ -15,4 +15,8 @@
   <!-- 插头 / 交流：拔电或未接电源时的备用图标 -->
   <StreamGeometry x:Key="Geo.Plug">M12 2 C9.24 2 7 4.24 7 7 V10 H9 V7 C9 5.34 10.34 4 12 4 C13.66 4 15 5.34 15 7 V10 H17 V7 C17 4.24 14.76 2 12 2 Z M8 12 H16 V15 C16 17.21 14.21 19 12 19 C9.79 19 8 17.21 8 15 V12 Z M10 19.5 H14 V22 H10 V19.5 Z</StreamGeometry>
 
+  <!-- 芯片引脚：功耗模式徽章用，左右各两根。
+       封装体与内芯由 Border 绘制（便于随状态换色），这里只画四根引脚 -->
+  <StreamGeometry x:Key="Geo.ChipPins">M5 8 H2 V10 H5 Z M5 14 H2 V16 H5 Z M19 8 H22 V10 H19 Z M19 14 H22 V16 H19 Z</StreamGeometry>
+
 </ResourceDictionary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,42 +12,66 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using EndfieldCharge.Animations;
+using EndfieldCharge.Models;
 using EndfieldCharge.Services;
 
 namespace EndfieldCharge.Views;
 
 /// <summary>
-/// 工业模式风格的电量 HUD：三态动画——
-/// 中心小胶囊（电标居中）→ 长条矩形（电标左移 + 工业模式）→
+/// 工业模式风格的 HUD：三态动画——
+/// 中心小胶囊（电标居中）→ 长条矩形（电标左移 + 模式标题）→
 /// 左侧小胶囊（数字 + 徽章）→ 停留数秒 → 收尾关掉。
+///
+/// 两种显示模式：
+///   · 弹出模式（默认）：播完就收起；点击可提前关掉。
+///   · 常驻模式：播完停在末态不收起，数据持续刷新，点击也不关，
+///     只有调用 <see cref="StopResident"/>（托盘退出）才会消失。
 /// </summary>
 public partial class HudWindow : Window
 {
     private static readonly TimeSpan DismissDuration = TimeSpan.FromMilliseconds(160);
 
-    // 徽章电量颜色：≥20% 黄绿，<20% 红
+    // 常驻模式的刷新 / 位置校正间隔
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan RepositionInterval = TimeSpan.FromSeconds(5);
+
+    // 徽章圆环颜色：正常黄绿，告警红（低电量 / 高负载）
     private static readonly Color BadgeColorNormal = Color.Parse("#C6CA4C");
-    private static readonly Color BadgeColorLow = Color.Parse("#FF4D4F");
+    private static readonly Color BadgeColorDanger = Color.Parse("#FF4D4F");
 
     private CancellationTokenSource? _cts;
+
+    private DispatcherTimer? _refreshTimer;
+    private DispatcherTimer? _repositionTimer;
+    private Func<HudContent>? _contentProvider;
+    private bool _resident;
 
     public HudWindow()
     {
         InitializeComponent();
 
         Cursor = new Cursor(StandardCursorType.Hand);
-        PointerPressed += (_, _) => _ = DismissAsync();
+
+        // 常驻模式下点一下不能把它关掉（常驻的定义就是"只有退出/关机才消失"）
+        PointerPressed += (_, _) =>
+        {
+            if (!_resident)
+                _ = DismissAsync();
+        };
 
         ResetToInitial();
     }
 
+    /// <summary>是否处于常驻模式。</summary>
+    public bool IsResident => _resident;
+
     /// <summary>
-    /// 简化版：拔电时只弹"电量圆胶囊"——无电标先出、无工业模式矩形、无波纹。
-    /// 全圆胶囊直接带电量内容弹出 → 停留 → 整体缩小收回。
+    /// 简化版：拔电时只弹"内容圆胶囊"——无电标先出、无模式矩形、无波纹。
+    /// 全圆胶囊直接带数值弹出 → 停留 → 整体缩小收回。
     /// </summary>
-    public async Task ShowSimpleAsync(BatterySnapshot? battery)
+    public async Task ShowSimpleAsync(HudContent content)
     {
-        ApplyBattery(battery, acOnline: false);
+        ApplyContent(content);
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -75,10 +100,48 @@ public partial class HudWindow : Window
             Hide();
     }
 
-    /// <summary>填入电量数据并播放一次完整动画。</summary>
-    public async Task ShowAndPlayAsync(BatterySnapshot? battery, bool acOnline)
+    /// <summary>填入内容并播放一次完整三态动画，播完自动收起。</summary>
+    public Task ShowFullAsync(HudContent content) =>
+        PlayAsync(content, resident: false);
+
+    /// <summary>
+    /// 常驻模式：播一次完整动画，然后停在末态（数字态）不收起，
+    /// 内容按 <paramref name="contentProvider"/> 持续刷新，点击也不会关闭。
+    /// </summary>
+    public Task ShowResidentAsync(Func<HudContent> contentProvider)
     {
-        ApplyBattery(battery, acOnline);
+        _resident = true;
+        _contentProvider = contentProvider;
+
+        var content = contentProvider();
+        return PlayAsync(content, resident: true);
+    }
+
+    /// <summary>退出常驻模式：停掉刷新定时器并隐藏窗口，回到"弹一下就走"的行为。</summary>
+    public void StopResident()
+    {
+        _resident = false;
+        _contentProvider = null;
+
+        StopResidentTimers();
+
+        _cts?.Cancel();
+        if (IsVisible)
+            Hide();
+    }
+
+    /// <summary>常驻模式下按当前数据源刷新一次内容（电源事件等场景调用）。</summary>
+    public void RefreshContent()
+    {
+        if (!_resident || _contentProvider is null)
+            return;
+
+        ApplyContent(_contentProvider());
+    }
+
+    private async Task PlayAsync(HudContent content, bool resident)
+    {
+        ApplyContent(content);
 
         // 打断上一次播放
         _cts?.Cancel();
@@ -103,39 +166,84 @@ public partial class HudWindow : Window
             return;
         }
 
+        var tracks = new List<Task>
+        {
+            HudAnimations.PillCorner().RunAsync(Pill, ct),
+            HudAnimations.PillAppear().RunAsync(Pill, ct),
+            HudAnimations.PillHeight().RunAsync(Pill, ct),
+            HudAnimations.PillHeight().RunAsync(RippleHost, ct),
+            HudAnimations.BoltIcon().RunAsync(BoltIcon, ct),
+            HudAnimations.RippleHost().RunAsync(RippleHost, ct),
+            HudAnimations.CircleForm().RunAsync(CircleForm, ct),
+            HudAnimations.SquareForm().RunAsync(SquareForm, ct),
+            HudAnimations.TitleHost().RunAsync(TitleHost, ct),
+            HudAnimations.NumHost().RunAsync(NumHost, ct),
+            HudAnimations.Ripple(0.0, 1.5, 0.50).RunAsync(RippleInner, ct),
+            HudAnimations.Ripple(0.0, 2.0, 0.50).RunAsync(RippleMid, ct),
+            HudAnimations.Ripple(0.0, 2.5, 0.60).RunAsync(RippleOuter, ct),
+            HudAnimations.RippleRise().RunAsync(RippleInnerHost, ct),
+            HudAnimations.RippleRise().RunAsync(RippleMidHost, ct),
+            HudAnimations.RippleRise().RunAsync(RippleOuterHost, ct),
+        };
+
+        // 常驻模式不挂收尾缩放：否则动画末尾会把整体缩到 0，
+        // 之后要停留在末态就得再"闪回来"。
+        if (!resident)
+            tracks.Add(HudAnimations.ScaleOut().RunAsync(ScaleHost, ct));
+
         try
         {
-            await Task.WhenAll(
-                HudAnimations.PillCorner().RunAsync(Pill, ct),
-                HudAnimations.PillAppear().RunAsync(Pill, ct),
-                HudAnimations.PillHeight().RunAsync(Pill, ct),
-                HudAnimations.PillHeight().RunAsync(RippleHost, ct),
-                HudAnimations.ScaleOut().RunAsync(ScaleHost, ct),
-                HudAnimations.BoltIcon().RunAsync(BoltIcon, ct),
-                HudAnimations.RippleHost().RunAsync(RippleHost, ct),
-                HudAnimations.CircleForm().RunAsync(CircleForm, ct),
-                HudAnimations.SquareForm().RunAsync(SquareForm, ct),
-                HudAnimations.TitleHost().RunAsync(TitleHost, ct),
-                HudAnimations.NumHost().RunAsync(NumHost, ct),
-                HudAnimations.Ripple(0.0, 1.5, 0.50).RunAsync(RippleInner, ct),
-                HudAnimations.Ripple(0.0, 2.0, 0.50).RunAsync(RippleMid, ct),
-                HudAnimations.Ripple(0.0, 2.5, 0.60).RunAsync(RippleOuter, ct),
-                HudAnimations.RippleRise().RunAsync(RippleInnerHost, ct),
-                HudAnimations.RippleRise().RunAsync(RippleMidHost, ct),
-                HudAnimations.RippleRise().RunAsync(RippleOuterHost, ct));
+            await Task.WhenAll(tracks);
         }
         catch (OperationCanceledException)
         {
             return; // 被新的触发或手动收起打断，保留当前状态交由下一轮处理
         }
 
-        if (!ct.IsCancellationRequested && IsVisible)
+        if (ct.IsCancellationRequested)
+            return;
+
+        if (resident)
+        {
+            // 明确拨到末态（数值态），再开始持续刷新
+            ShowFullyExpandedStatic();
+            StartResidentTimers();
+            return;
+        }
+
+        if (IsVisible)
             Hide();
     }
 
-    /// <summary>提前收起（点击时）。</summary>
+    // ---------------- 常驻模式的定时器 ----------------
+
+    private void StartResidentTimers()
+    {
+        StopResidentTimers();
+
+        _refreshTimer = new DispatcherTimer(RefreshInterval, DispatcherPriority.Normal, (_, _) => RefreshContent());
+        _refreshTimer.Start();
+
+        // 显示器插拔 / 分辨率变化会把贴顶窗口挤走，定期校正一次位置
+        _repositionTimer = new DispatcherTimer(RepositionInterval, DispatcherPriority.Normal, (_, _) => PositionTopCenter());
+        _repositionTimer.Start();
+    }
+
+    private void StopResidentTimers()
+    {
+        _refreshTimer?.Stop();
+        _refreshTimer = null;
+
+        _repositionTimer?.Stop();
+        _repositionTimer = null;
+    }
+
+    /// <summary>提前收起（点击时）。常驻模式下不生效——常驻只认托盘退出。</summary>
     private async Task DismissAsync()
     {
+        if (_resident)
+            return;
+
         _cts?.Cancel();
 
         var fade = new Animation
@@ -167,37 +275,48 @@ public partial class HudWindow : Window
     private const double RingDiameter = 46d;
     private const double RingThickness = 4.5d;
 
-    private void ApplyBattery(BatterySnapshot? snap, bool acOnline)
+    /// <summary>
+    /// 把一份 <see cref="HudContent"/> 贴到界面上。
+    /// 数值已在工厂里格式化好，这里只负责排版与配色。
+    /// </summary>
+    private void ApplyContent(HudContent content)
     {
-        double fraction = 0d;
+        // 模式标题（简化胶囊的 Title 为空，不显示）
+        TitleText.Text = content.Title;
+        CaptionText.Text = content.Caption;
 
-        if (snap is null || !snap.HasBattery)
-        {
-            // 台式机 / 读不到电池：不编数字，圆环留空
-            WhValueText.Text = "--";
-            WhMaxText.Text = string.Empty;
-            PercentText.Text = "--";
-        }
-        else
-        {
-            // mWh（原视频即显示 mWh 整数，如 "3725 /4240"）
-            WhValueText.Text = (snap.RemainingWh * 1000).ToString("F0");
-            WhMaxText.Text = $"/{snap.FullWh * 1000:F0}";
-            PercentText.Text = snap.Percent.ToString();
-            fraction = Math.Clamp(snap.Percent / 100d, 0d, 1d);
-        }
+        // 主数值 / 单位 / 右侧百分比
+        ValueText.Text = content.Primary;
+        UnitText.Text = content.Unit;
+        PercentText.Text = content.RingPercent.ToString();
 
-        // 电量圆环：弧长按电量百分比绘制（0% 时不画，100% 时几乎闭合）
+        // 圆环：笔记本 = 电量百分比；台式机 = 设备负载
+        double fraction = Math.Clamp(content.RingPercent / 100d, 0d, 1d);
         BadgeArc.Data = BuildRingGeometry(fraction, RingDiameter, RingThickness);
 
-        // 电量圈变色：≥20% 黄绿，<20% 红色
-        var badgeColor = snap is not null && snap.HasBattery && snap.Percent < 20
-            ? BadgeColorLow
-            : BadgeColorNormal;
-        BadgeArc.Stroke = new SolidColorBrush(badgeColor);
-        LaptopScreen.BorderBrush = new SolidColorBrush(badgeColor);
-        LaptopBase.Background = new SolidColorBrush(badgeColor);
-        BadgeElectrode.Background = new SolidColorBrush(badgeColor);
+        // 配色：告警时才变红，且整组一起换（环 + 内部图形 + 电极）
+        var color = content.RingDanger ? BadgeColorDanger : BadgeColorNormal;
+        var brush = new SolidColorBrush(color);
+
+        BadgeArc.Stroke = brush;
+        LaptopScreen.BorderBrush = brush;
+        LaptopBase.Background = brush;
+        BadgeElectrode.Background = brush;
+        ChipBody.BorderBrush = brush;
+        ChipDie.Background = brush;
+        ChipPins.Foreground = brush;
+
+        // 内部图形：电量模式用笔记本，功耗模式用芯片
+        bool power = content.Mode == HudMode.PowerDraw;
+        BadgeLaptop.IsVisible = !power;
+        BadgeChip.IsVisible = power;
+        BadgeElectrode.IsVisible = !power;   // 电极只属于笔记本图形
+    }
+
+    /// <summary>无电池数据时的占位内容（读不到任何信息时用）。</summary>
+    public void ApplyUnavailable()
+    {
+        ApplyContent(HudContent.Empty);
     }
 
     /// <summary>

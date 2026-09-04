@@ -26,8 +26,15 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.2.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1" />
-    <!-- 电池信息兜底读取（主路径是 powrprof P/Invoke，无需此包；WMI 仅作备用） -->
-    <PackageReference Include="System.Management" Version="8.0.0" />
+    <!-- WMI（电池兜底、设备类型 PCSystemType） -->
+    <PackageReference Include="System.Management" Version="10.0.11" />
+    <!--
+      硬件传感器：LibreHardwareMonitorLib（MIT，AIDA64 / HWiNFO 同源的开源实现）。
+      CPU / 内存 / GPU 占用率与 CPU 封装、GPU 实时功率全部读真实传感器，不做估算。
+      CPU 封装功率需要加载内核驱动（WinRing0，库内自带、运行时自动解压），
+      因此读 CPU 功率需以管理员身份运行；GPU 功率走 NVML / ADL，普通权限即可。
+    -->
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.7-pre731" />
   </ItemGroup>
 
   <ItemGroup>

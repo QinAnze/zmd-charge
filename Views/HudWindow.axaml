@@ -163,7 +163,10 @@
         <StackPanel.RenderTransform>
           <TranslateTransform X="0"/>
         </StackPanel.RenderTransform>
-        <TextBlock Text="/// SUPER CHARGE MODE"
+        <!-- 副标题 / 标题都由代码按模式填写：
+             超充模式 / 充电模式（笔记本）· 功耗模式（台式机） -->
+        <TextBlock x:Name="CaptionText"
+                   Text="/// SUPER CHARGE MODE"
                    FontFamily="{DynamicResource Hud.FontFamily}"
                    FontSize="9" FontWeight="Medium"
                    LetterSpacing="2"
@@ -202,12 +205,14 @@
 
         <StackPanel Grid.Column="3" Orientation="Horizontal"
                     VerticalAlignment="Center" Spacing="2">
-          <TextBlock x:Name="WhValueText"
+          <!-- 主数值：笔记本是剩余 mWh，台式机是估算功耗 W -->
+          <TextBlock x:Name="ValueText"
                      Text="0.0"
                      FontFamily="{DynamicResource Hud.FontFamily}"
                      FontSize="26" FontWeight="SemiBold"
                      Foreground="White"/>
-          <TextBlock x:Name="WhMaxText"
+          <!-- 单位：笔记本是 /满电 mWh，台式机是 W -->
+          <TextBlock x:Name="UnitText"
                      Text="/0.0"
                      FontFamily="{DynamicResource Hud.FontFamily}"
                      FontSize="14" FontWeight="Medium"
@@ -231,11 +236,12 @@
                      Margin="2,0,0,2"/>
         </StackPanel>
 
-        <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住
+        <!-- 黄绿徽章：46 直径正好被 60 高胶囊包住
              底：暗色圆盘
-             外圈：进度圆弧（弧长 = 电量百分比，12 点方向起顺时针），几何在代码里按百分比生成
-             颜色：≥20% 黄绿 #C6CA4C，<20% 变红 #FF4D4F
-             内部图形 = 笔记本电脑（屏幕描边 + 底座填充） -->
+             外圈：进度圆弧（弧长按百分比在代码里生成，12 点方向起顺时针）
+                   笔记本 = 电量百分比；台式机 = 设备负载（CPU+内存+GPU 加权）
+             颜色：正常黄绿 #C6CA4C，告警红 #FF4D4F（低电量 / 负载 ≥90%）
+             内部图形：笔记本模式 = 电脑；功耗模式 = 芯片 -->
         <Grid x:Name="Badge" Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
           <Ellipse Width="46" Height="46" Fill="#FF262425"/>
 
@@ -258,6 +264,25 @@
                     VerticalAlignment="Bottom" HorizontalAlignment="Center"/>
           </Grid>
 
+          <!-- 芯片图形（功耗模式）：封装体描边 + 内芯填充 + 四根引脚 -->
+          <Grid x:Name="BadgeChip" Width="24" Height="24"
+                VerticalAlignment="Center" HorizontalAlignment="Center"
+                IsVisible="False">
+            <Border x:Name="ChipBody"
+                    Width="14" Height="14" CornerRadius="2"
+                    BorderBrush="#FFC6CA4C" BorderThickness="2"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border x:Name="ChipDie"
+                    Width="5" Height="5" CornerRadius="1"
+                    Background="#FFC6CA4C"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <PathIcon x:Name="ChipPins"
+                      Width="24" Height="24"
+                      Data="{DynamicResource Geo.ChipPins}"
+                      Foreground="#FFC6CA4C"/>
+          </Grid>
+
+          <!-- 电池电极：只属于笔记本图形，功耗模式隐藏 -->
           <Border x:Name="BadgeElectrode" Width="9" Height="3" CornerRadius="1,1,0,0"
                   Background="#FFC6CA4C"
                   HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -73,7 +73,7 @@ public static class Localization
     public static string MonitorName(int index, bool isPrimary) => IsChinese
         ? isPrimary ? $"显示器 {index + 1}（主）" : $"显示器 {index + 1}"
         : isPrimary ? $"Monitor {index + 1} (Primary)" : $"Monitor {index + 1}";
-    public static string MonitorDefault => IsChinese ? "默认" : "Default";
+    public static string MonitorPrimaryDefault => IsChinese ? "主显示器（默认）" : "Primary Monitor (Default)";
 
     // ---- 动画页 ----
     public static string TabAnimation => IsChinese ? "动画" : "Animation";

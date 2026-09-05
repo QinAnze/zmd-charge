@@ -339,6 +339,9 @@ public partial class App : Application
             return;
         }
 
+        // 单击托盘图标：立即播放电量预览（真实电池数据，完整三态动画），同时弹出菜单
+        _ = TriggerHudAsync();
+
         _trayMenu = new TrayMenuWindow();
         _trayMenu.PreviewClicked += () => { _trayMenu.Close(); _ = TriggerHudAsync(); };
         _trayMenu.SettingsClicked += () => { _trayMenu.Close(); OpenSettingsWindow(); };

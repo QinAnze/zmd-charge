@@ -1,0 +1,36 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ============================================================
+       图标几何：24×24 网格，统一线性/实心极简风格，单色（无 emoji）
+       风格与 EndfieldCharge Geometries.axaml 一致
+       ============================================================ -->
+
+  <!-- 闪电（继承原项目主图标，作为品牌锚点） -->
+  <StreamGeometry x:Key="Geo.Bolt">M13 2 L4 13 L12 13 L18 2 Z M13 11 L20 11 L13 22 L4 22 Z</StreamGeometry>
+
+  <!-- 左箭头：上一页 -->
+  <StreamGeometry x:Key="Geo.ChevronLeft">M14.5 4 L7 12 L14.5 20 L17 17.5 L12 12 L17 6.5 Z</StreamGeometry>
+
+  <!-- 右箭头：下一页 -->
+  <StreamGeometry x:Key="Geo.ChevronRight">M9.5 4 L17 12 L9.5 20 L7 17.5 L12 12 L7 6.5 Z</StreamGeometry>
+
+  <!-- 列表（页面列表入口）：三行缩略图式 -->
+  <StreamGeometry x:Key="Geo.List">M4 5 H8 V9 H4 Z M10 5 H20 V9 H10 Z M4 10.5 H8 V14.5 H4 Z M10 10.5 H20 V14.5 H10 Z M4 16 H8 V20 H4 Z M10 16 H20 V20 H10 Z</StreamGeometry>
+
+  <!-- 笔：斜置笔杆 + 笔尖 -->
+  <StreamGeometry x:Key="Geo.Pen">M17.2 3.2 L20.8 6.8 L8.6 19 H5 V15.4 Z M15.4 5 L5 15.4 V17 H6.6 L17 6.6 Z</StreamGeometry>
+
+  <!-- 选择（箭头指针）：放映默认态 -->
+  <StreamGeometry x:Key="Geo.Select">M6 3 L18 11 L12.6 12.2 L10 18.4 Z</StreamGeometry>
+
+  <!-- 橡皮：斜置圆角矩形块 -->
+  <StreamGeometry x:Key="Geo.Eraser">M9.6 4.6 L19.4 14.4 C20.2 15.2 20.2 16.4 19.4 17.2 L16.2 20.4 H9.6 L4.6 15.4 C3.8 14.6 3.8 13.4 4.6 12.6 Z M9.6 7 L6.9 9.6 L13.4 16.1 L16.1 13.4 Z</StreamGeometry>
+
+  <!-- 撤销：逆时针箭头 -->
+  <StreamGeometry x:Key="Geo.Undo">M8 5 L8 9 H12 L10.4 10.6 C11.4 11.2 12.6 11.5 14 11.5 C16.5 11.5 18.4 12.6 19.5 14.5 L17 16 C16.3 14.8 15.3 14.2 14 14.2 C12 14.2 10.3 13.6 8.9 12.5 L7.4 14 L6 10 L2 9 Z</StreamGeometry>
+
+  <!-- 清空（页面列表页码徽章等备用） -->
+  <StreamGeometry x:Key="Geo.Clear">M5 5 L19 19 M19 5 L5 19</StreamGeometry>
+
+</ResourceDictionary>

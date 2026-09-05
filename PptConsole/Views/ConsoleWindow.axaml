@@ -1,0 +1,308 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="204"
+        x:Class="PptConsole.Views.ConsoleWindow"
+        Width="1280" Height="204"
+        Title="PptConsole"
+
+        SystemDecorations="None"
+        Background="Transparent"
+
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        CanResize="False"
+        Focusable="False"
+        WindowStartupLocation="Manual">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://PptConsole/Styles/Geometries.axaml"/>
+        <ResourceInclude Source="avares://PptConsole/Styles/ConsoleTheme.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <!-- 底部吊条：窗口贴住放映屏底边（高 204），三胶囊距底 28。
+       胶囊描边 rgba(233,231,228,.14)：深色幻灯片上保证"浮起"轮廓（设计适配项）。 -->
+  <Grid x:Name="Root">
+    <Grid x:Name="Strip" VerticalAlignment="Bottom" Margin="0,0,0,28">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ========== 左短胶囊：页面列表 + 上一页 ========== -->
+      <Border x:Name="LeftPill" Grid.Column="0"
+              Width="150" Height="56" CornerRadius="28"
+              Background="#FF312F30"
+              BorderBrush="#24E9E7E4" BorderThickness="1"
+              ClipToBounds="True"
+              HorizontalAlignment="Left" Margin="48,0,0,0"
+              Opacity="0">
+        <Border.RenderTransform>
+          <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+        </Border.RenderTransform>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="1"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+
+          <Border x:Name="ListZoneL" Grid.Column="0" Background="Transparent"
+                  CornerRadius="28,0,0,28" ClipToBounds="True">
+            <Grid>
+              <Canvas x:Name="ListCanvasL"/>
+              <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.List}"
+                        Foreground="#CCFFFFFF"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+
+          <Rectangle Grid.Column="1" Fill="#FF3B393A" Margin="0,16"/>
+
+          <Border x:Name="PrevZone" Grid.Column="2" Background="Transparent"
+                  CornerRadius="0,28,28,0" ClipToBounds="True">
+            <Grid>
+              <Canvas x:Name="PrevCanvas"/>
+              <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.ChevronLeft}"
+                        Foreground="#CCFFFFFF"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- ========== 中长胶囊：笔 / 选择 / 橡皮 + 向上扩展面板 ========== -->
+      <StackPanel Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Center">
+
+        <!-- 工具面板（收起时高 0 不可见；与胶囊同宽、同底色，向上撑高成圆角方形） -->
+        <Border x:Name="PanelHost"
+                Width="340" Height="0" CornerRadius="18,18,0,0"
+                Background="#FF312F30"
+                BorderBrush="#24E9E7E4" BorderThickness="1,1,1,0"
+                ClipToBounds="True" Opacity="0" IsVisible="False">
+          <Grid>
+
+            <!-- 笔面板 -->
+            <StackPanel x:Name="PenPanel" Margin="20,14" Spacing="12" IsVisible="False">
+              <StackPanel x:Name="PenRowColor" Orientation="Horizontal" Spacing="16" Opacity="0">
+                <TextBlock Text="颜色" FontFamily="{DynamicResource Hud.FontFamily}" FontSize="12"
+                           Foreground="#66FFFFFF" Width="34" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                  <Border x:Name="PenColor0" Width="24" Height="24" CornerRadius="12"
+                          Background="#FFC6CA4C" BorderThickness="2" BorderBrush="#FFFFFFFF" Tag="0"/>
+                  <Border x:Name="PenColor1" Width="24" Height="24" CornerRadius="12"
+                          Background="#FFE03131" BorderThickness="2" BorderBrush="#00FFFFFF" Tag="1"/>
+                  <Border x:Name="PenColor2" Width="24" Height="24" CornerRadius="12"
+                          Background="#FF38BDF8" BorderThickness="2" BorderBrush="#00FFFFFF" Tag="2"/>
+                  <Border x:Name="PenColor3" Width="24" Height="24" CornerRadius="12"
+                          Background="#FFE9E7E4" BorderThickness="2" BorderBrush="#00FFFFFF" Tag="3"/>
+                </StackPanel>
+              </StackPanel>
+
+              <StackPanel x:Name="PenRowSize" Orientation="Horizontal" Spacing="16" Opacity="0">
+                <TextBlock Text="粗细" FontFamily="{DynamicResource Hud.FontFamily}" FontSize="12"
+                           Foreground="#66FFFFFF" Width="34" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                  <Border x:Name="PenSize0" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#FFFFFFFF" Tag="0">
+                    <Ellipse Width="6" Height="6" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <Border x:Name="PenSize1" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#00FFFFFF" Tag="1">
+                    <Ellipse Width="10" Height="10" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <Border x:Name="PenSize2" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#00FFFFFF" Tag="2">
+                    <Ellipse Width="14" Height="14" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                </StackPanel>
+
+                <Rectangle Width="1" Fill="#FF3B393A" Margin="4,6"/>
+
+                <!-- 撤销 / 清空 -->
+                <Border x:Name="PenUndoBtn" Width="28" Height="28" CornerRadius="14"
+                        Background="#14FFFFFF" Tag="undo">
+                  <PathIcon Width="13" Height="13" Data="{DynamicResource Geo.Undo}" Foreground="#B3FFFFFF"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Border x:Name="PenClearBtn" Width="28" Height="28" CornerRadius="14"
+                        Background="#14FFFFFF" Tag="clear">
+                  <PathIcon Width="12" Height="12" Data="{DynamicResource Geo.Clear}" Foreground="#B3FFFFFF"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+              </StackPanel>
+            </StackPanel>
+
+            <!-- 橡皮面板 -->
+            <StackPanel x:Name="EraserPanel" Margin="20,14" Spacing="12" IsVisible="False">
+              <StackPanel x:Name="EraserRowSize" Orientation="Horizontal" Spacing="16" Opacity="0">
+                <TextBlock Text="大小" FontFamily="{DynamicResource Hud.FontFamily}" FontSize="12"
+                           Foreground="#66FFFFFF" Width="34" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                  <Border x:Name="EraserSize0" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#FFFFFFFF" Tag="0">
+                    <Ellipse Width="8" Height="8" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <Border x:Name="EraserSize1" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#00FFFFFF" Tag="1">
+                    <Ellipse Width="13" Height="13" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <Border x:Name="EraserSize2" Width="28" Height="28" CornerRadius="14"
+                          Background="#14FFFFFF" BorderThickness="1.5" BorderBrush="#00FFFFFF" Tag="2">
+                    <Ellipse Width="18" Height="18" Fill="#E6FFFFFF"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                </StackPanel>
+
+                <Rectangle Width="1" Fill="#FF3B393A" Margin="4,6"/>
+
+                <Border x:Name="EraserUndoBtn" Width="28" Height="28" CornerRadius="14"
+                        Background="#14FFFFFF" Tag="undo">
+                  <PathIcon Width="13" Height="13" Data="{DynamicResource Geo.Undo}" Foreground="#B3FFFFFF"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Border x:Name="EraserClearBtn" Width="28" Height="28" CornerRadius="14"
+                        Background="#14FFFFFF" Tag="clear">
+                  <PathIcon Width="12" Height="12" Data="{DynamicResource Geo.Clear}" Foreground="#B3FFFFFF"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+              </StackPanel>
+            </StackPanel>
+
+          </Grid>
+        </Border>
+
+        <!-- 工具胶囊本体：选中笔/橡皮时顶部圆角变 18，与面板拼成一体 -->
+        <Border x:Name="ToolPill"
+                Width="340" Height="56" CornerRadius="28"
+                Background="#FF312F30"
+                BorderBrush="#24E9E7E4" BorderThickness="1"
+                ClipToBounds="True"
+                Opacity="0">
+          <Border.RenderTransform>
+            <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+          </Border.RenderTransform>
+          <Grid Margin="16,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="1"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="1"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 笔 -->
+            <Border x:Name="PenZone" Grid.Column="0" Background="Transparent" ClipToBounds="True">
+              <Grid>
+                <Canvas x:Name="PenCanvas"/>
+                <Border x:Name="PenPlate" Width="32" Height="32" CornerRadius="16"
+                        Background="#FFE9E7E4" IsVisible="False"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <PathIcon Width="15" Height="15" Data="{DynamicResource Geo.Pen}"
+                            Foreground="#FF141313"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <PathIcon x:Name="PenIcon" Width="20" Height="20"
+                          Data="{DynamicResource Geo.Pen}" Foreground="#8CFFFFFF"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+
+            <Rectangle Grid.Column="1" Fill="#FF3B393A" Margin="0,18"/>
+
+            <!-- 选择 -->
+            <Border x:Name="SelectZone" Grid.Column="2" Background="Transparent" ClipToBounds="True">
+              <Grid>
+                <Canvas x:Name="SelectCanvas"/>
+                <Border x:Name="SelectPlate" Width="32" Height="32" CornerRadius="16"
+                        Background="#FFE9E7E4" IsVisible="False"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <PathIcon Width="15" Height="15" Data="{DynamicResource Geo.Select}"
+                            Foreground="#FF141313"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <PathIcon x:Name="SelectIcon" Width="20" Height="20"
+                          Data="{DynamicResource Geo.Select}" Foreground="#8CFFFFFF"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+
+            <Rectangle Grid.Column="3" Fill="#FF3B393A" Margin="0,18"/>
+
+            <!-- 橡皮 -->
+            <Border x:Name="EraserZone" Grid.Column="4" Background="Transparent" ClipToBounds="True">
+              <Grid>
+                <Canvas x:Name="EraserCanvas"/>
+                <Border x:Name="EraserPlate" Width="32" Height="32" CornerRadius="16"
+                        Background="#FFE9E7E4" IsVisible="False"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <PathIcon Width="15" Height="15" Data="{DynamicResource Geo.Eraser}"
+                            Foreground="#FF141313"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <PathIcon x:Name="EraserIcon" Width="20" Height="20"
+                          Data="{DynamicResource Geo.Eraser}" Foreground="#8CFFFFFF"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+          </Grid>
+        </Border>
+      </StackPanel>
+
+      <!-- ========== 右短胶囊：下一页 + 页面列表（与左侧对称） ========== -->
+      <Border x:Name="RightPill" Grid.Column="2"
+              Width="150" Height="56" CornerRadius="28"
+              Background="#FF312F30"
+              BorderBrush="#24E9E7E4" BorderThickness="1"
+              ClipToBounds="True"
+              HorizontalAlignment="Right" Margin="0,0,48,0"
+              Opacity="0">
+        <Border.RenderTransform>
+          <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+        </Border.RenderTransform>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="1"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+
+          <Border x:Name="NextZone" Grid.Column="0" Background="Transparent"
+                  CornerRadius="28,0,0,28" ClipToBounds="True">
+            <Grid>
+              <Canvas x:Name="NextCanvas"/>
+              <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.ChevronRight}"
+                        Foreground="#CCFFFFFF"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+
+          <Rectangle Grid.Column="1" Fill="#FF3B393A" Margin="0,16"/>
+
+          <Border x:Name="ListZoneR" Grid.Column="2" Background="Transparent"
+                  CornerRadius="0,28,28,0" ClipToBounds="True">
+            <Grid>
+              <Canvas x:Name="ListCanvasR"/>
+              <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.List}"
+                        Foreground="#CCFFFFFF"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </Grid>
+      </Border>
+
+    </Grid>
+  </Grid>
+</Window>

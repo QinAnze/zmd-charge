@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PptConsole.Views.InkOverlayWindow"
+        Width="1280" Height="720"
+        Title="PptConsole.Ink"
+
+        SystemDecorations="None"
+        Background="Transparent"
+
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        CanResize="False"
+        Focusable="False"
+        WindowStartupLocation="Manual">
+
+  <!-- 全屏透明墨迹层：
+       "选择"态 = WS_EX_TRANSPARENT 点击穿透（触控直达放映）；
+       "笔/橡皮"态 = 接管触控自绘墨迹（不写入 PPT 文件）。
+       墨迹按页记忆（页码由控制台翻页事件维护）。 -->
+  <Grid x:Name="Root" Background="Transparent">
+    <Canvas x:Name="InkCanvas" IsHitTestVisible="False"/>
+    <Canvas x:Name="CursorCanvas" IsHitTestVisible="False"/>
+  </Grid>
+</Window>

@@ -1,0 +1,58 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=netstandard">
+
+  <!-- ============================================================
+       控制台主题：完整继承 EndfieldCharge HUD 设计系统
+       （色板 / 字体 / 不透明度层级与 HudTheme.axaml 逐项对齐）
+       胶囊 #312F30 实心；文字纯白靠 Opacity 分层；
+       唯一彩色是徽章黄绿（此处用作"笔"工具的激活色）。
+       ============================================================ -->
+
+  <!-- ==== 胶囊背景：实心深炭色，无渐变 ==== -->
+  <Color x:Key="Hud.Pill">#FF312F30</Color>
+
+  <!-- ==== 深色圆角面板（工具面板 / 撑高后的胶囊同底色） ==== -->
+  <Color x:Key="Hud.Panel">#FF312F30</Color>
+  <Color x:Key="Hud.PanelDivider">#FF3B393A</Color>
+
+  <!-- ==== 白色圆底 / 方块图标底 ==== -->
+  <Color x:Key="Hud.IconPlate">#FFE9E7E4</Color>
+  <Color x:Key="Hud.BoltDark">#FF141313</Color>
+
+  <!-- ==== 文字：纯白，层级靠不透明度 ==== -->
+  <Color x:Key="Hud.TextPrimary">#FFFFFFFF</Color>
+  <x:Double x:Key="Hud.TextSecondaryOpacity">0.55</x:Double>
+  <x:Double x:Key="Hud.TextTertiaryOpacity">0.40</x:Double>
+
+  <!-- ==== 唯一彩色：徽章黄绿（工具激活态 / 笔迹默认色） ==== -->
+  <Color x:Key="Hud.Accent">#FFC6CA4C</Color>
+  <Color x:Key="Hud.BadgeDark">#FF262425</Color>
+
+  <!-- ==== 波纹（与原项目 Ripple 同色） ==== -->
+  <Color x:Key="Hud.Ripple">#FF656363</Color>
+
+  <!-- ==== 字体族：与原项目完全一致 ==== -->
+  <FontFamily x:Key="Hud.FontFamily">"HarmonyOS Sans SC", "HarmonyOS Sans", Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif</FontFamily>
+  <FontFamily x:Key="Hud.FontFamilyNumeric">"Inter Medium", "HarmonyOS Sans SC Medium", "HarmonyOS Sans Medium", Inter, "Microsoft YaHei UI", "PingFang SC", sans-serif</FontFamily>
+
+  <!-- ==== 控制台度量 ==== -->
+  <!-- 短胶囊（翻页）：全圆半径 = 高度一半 -->
+  <x:Double x:Key="Console.SidePillHeight">56</x:Double>
+  <x:Double x:Key="Console.SidePillRadius">28</x:Double>
+  <x:Double x:Key="Console.SidePillWidth">150</x:Double>
+
+  <!-- 中胶囊（工具）：默认收起为长胶囊；选中工具后撑高为面板+胶囊组合体 -->
+  <x:Double x:Key="Console.ToolPillHeight">56</x:Double>
+  <x:Double x:Key="Console.ToolPillRadius">28</x:Double>
+  <x:Double x:Key="Console.ToolPillWidth">340</x:Double>
+  <x:Double x:Key="Console.PanelRadius">18</x:Double>
+  <x:Double x:Key="Console.PanelHeight">104</x:Double>
+
+  <!-- 触控目标：工具按钮最小 44px，图标圆底 32（与原项目电标同尺寸） -->
+  <x:Double x:Key="Console.IconPlateSize">32</x:Double>
+
+  <!-- 底部吊起位置：距放映屏底边的留白 -->
+  <x:Double x:Key="Console.BottomMargin">28</x:Double>
+
+</ResourceDictionary>

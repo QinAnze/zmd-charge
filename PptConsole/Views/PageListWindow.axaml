@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="PptConsole.Views.PageListWindow"
+        Title="PptConsole.Pages">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://PptConsole/Styles/Geometries.axaml"/>
+        <ResourceInclude Source="avares://PptConsole/Styles/ConsoleTheme.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <!-- 页面列表面板：深色圆角，下缘贴近工具胶囊上方 -->
+  <Border x:Name="Panel"
+          Width="400" MinHeight="64" MaxHeight="520"
+          CornerRadius="18"
+          Background="#F8312F30"
+          BorderBrush="#24E9E7E4" BorderThickness="1"
+          ClipToBounds="True" Padding="14">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <WrapPanel x:Name="Grid" ItemWidth="118" ItemHeight="96"/>
+    </ScrollViewer>
+  </Border>
+</Window>

@@ -12,8 +12,17 @@ namespace PptConsole.Services;
 /// </summary>
 internal sealed class SlideshowWatcher
 {
-    /// <summary>放映窗口类名候选（MS PowerPoint = screenClass）。</summary>
-    private static readonly string[] SlideClasses = { "screenClass" };
+    /// <summary>
+    /// 放映窗口类名候选（MS PowerPoint = screenClass）。
+    /// 以下 WPS 候选由公开资料推断，未在真机逐项验证——
+    /// 冗余项只是让 FindWindow 多试一次，命中错类名会得到空句柄、无副作用。
+    /// </summary>
+    private static readonly string[] SlideClasses =
+    {
+        "screenClass",          // MS PowerPoint
+        "wppslideshowwnd",      // WPS 演示（候选，未验证）
+        "KWMainFrame",          // WPS 通用主窗（候选，未验证）
+    };
 
     private const int PollMilliseconds = 1000;
     /// <summary>连续 N 次找不到才判定放映结束（防放映切换期的窗口抖动）。</summary>

@@ -39,13 +39,13 @@ dotnet run -c Debug -- --demo
 
 | 胶囊 | 按钮 | 行为 |
 |---|---|---|
-| 左短 | 上一页 | SendInput 方向键 ←，墨迹层页码 −1 |
-| 左短 | ☰ 页面列表 | 入口（COM 阶段实现） |
+| 左短 | 上一页 | SendInput 方向键 ←；COM 接管时页码由轮询校准，否则墨迹层页码 −1 |
+| 左短 | ☰ 页面列表 | 弹出缩略图网格（COM 导出 / 兜底页码），点击跳页（`GotoSlide`） |
 | 中长 | 笔 | 墨迹层接管触控；向上弹出"颜色/粗细/撤销/清空"面板 |
 | 中长 | 选择 | 墨迹层点击穿透，触控直达放映 |
 | 中长 | 橡皮 | 墨迹层接管触控；弹出"大小/撤销/清空"面板；笔画级擦除 |
-| 右短 | 下一页 | SendInput 方向键 →，墨迹层页码 +1 |
-| 右短 | ☰ 页面列表 | 入口（COM 阶段实现） |
+| 右短 | 下一页 | SendInput 方向键 →；COM 接管时页码由轮询校准，否则墨迹层页码 +1 |
+| 右短 | ☰ 页面列表 | 弹出缩略图网格（COM 导出 / 兜底页码），点击跳页（`GotoSlide`） |
 
 点击任意工具按钮即播 500ms 触控波纹；胶囊吊起按 左→中→右 错峰入场；面板收起支撑（BackOut）。
 
@@ -60,7 +60,9 @@ App.axaml / App.axaml.cs         组装：放映检测→吊起、事件总线�
 CapsuleBehavior.cs               胶囊窗公共行为（静态：窗口壳/NOACTIVATE/Place/进出场）
 InkOverlayWindow                 全屏自绘墨迹层（穿透切换/压感/橡皮/撤销/按页记忆）
 ConsoleAnimations.cs             动画库（原 HudAnimations 曲线库的可逆交互化）
-SlideshowWatcher.cs              Win32 轮询 PowerPoint 放映窗口（screenClass）+ 显示器定位
+SlideshowWatcher.cs              Win32 轮询 PowerPoint 放映窗口（screenClass/WPS 候选）+ 显示器定位
+PptComBridge.cs                  COM 晚期绑定：页码/页数轮询、GotoSlide 跳页、缩略图导出（任一翻页方式都校准墨迹页码）
+PageListWindow                   页面列表：缩略图网格 + 当前页高亮 + 点击跳页（COM 或兜底页码）
 InputNative / Win32Interop       SendInput 方向键；窗口样式/显示器/键盘 P/Invoke
 Styles/ ConsoleTheme+Geometries  设计令牌与图标几何
 ```
@@ -72,9 +74,8 @@ Styles/ ConsoleTheme+Geometries  设计令牌与图标几何
 3. 橡皮指示圈与笔画级擦除是否跟随触点。
 4. 胶囊之间空白处触控是否直达放映层（三窗拆分收益）。
 
-## 已知边界与后续（COM 阶段）
+## 已知边界
 
-- **页码感知**：当前靠内部计数，不感知键盘/遥控翻页。接入 `SlideShowNextSlide` 事件后消除盲区。
-- **页面列表**：左右 ☰ 为占位入口，COM 阶段实现页数/缩略图/点击跳页（`GotoSlide`）。
-- **WPS 兼容**：放映窗口类名仅验证了 MS PowerPoint 的 `screenClass`；WPS 类名待验证（`SlideshowWatcher.SlideClasses` 已留扩展数组）。
-- 若放映程序以管理员运行，`SendInput` 会被 UIPI 拦截，需同权限运行。
+- **COM 接管前提**：页码感知/页面列表在 PowerPoint 无放映或连接失败时自动降级为内部计数＋兜底页码，不影响基本翻页。
+- **WPS 兼容**：放映窗口类名候选含 WPS（`wppslideshowwnd`/`KWMainFrame`，未逐项验证）；WPS COM 是否暴露 `PowerPoint.Application` 与 `GotoSlide`/`Slide.Export` 未在真机验证，降级即可用。
+- 若放映程序以管理员运行，`SendInput` 会被 UIPI 拦截，需同权限运行（COM 之下跳页走 `GotoSlide` 可绕开该限制）。

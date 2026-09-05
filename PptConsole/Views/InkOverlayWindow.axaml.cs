@@ -141,10 +141,25 @@ public partial class InkOverlayWindow : Window
 
     // ---------------- 页 / 撤销 / 清空 ----------------
 
+    /// <summary>当前墨迹页码（1 基）。供页面列表高亮当前页。</summary>
+    public int CurrentPage => _currentPage;
+
     /// <summary>翻页时由控制台事件驱动（+1/-1）。</summary>
     public void NotifyPageChanged(int delta)
     {
         _currentPage = Math.Max(1, _currentPage + delta);
+        RebuildCanvas();
+    }
+
+    /// <summary>由 COM 校准的绝对页码（1 基）——任意翻页方式都能同步。</summary>
+    public void SetCurrentPage(int page)
+    {
+        if (page < 1)
+            return;
+        if (page == _currentPage)
+            return;
+
+        _currentPage = page;
         RebuildCanvas();
     }
 

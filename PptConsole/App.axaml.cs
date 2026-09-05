@@ -24,8 +24,15 @@ public partial class App : Application
     private ConsoleController? _console;
     private InkOverlayWindow? _ink;
     private SlideshowWatcher? _watcher;
+    private PptComBridge? _bridge;
     private TrayIcon? _tray;
     private IClassicDesktopStyleApplicationLifetime? _desktop;
+
+    private bool _comPages;          // COM 页码是否接管（接管后墨迹页码由轮询校准）
+    private Screen? _activeScreen;   // 当前放映屏（页面列表面板定位用）
+    private PageListWindow? _pageList;   // 当前页面列表面板（同一时刻至多一个）
+
+    private const int DemoSlideCount = 8;   // --demo / 无 COM 连接时的兜底页数
 
     public override void Initialize()
     {
@@ -43,19 +50,26 @@ public partial class App : Application
         _console = new ConsoleController();
         _ink = new InkOverlayWindow();
 
+        // COM 桥：页码轮询校准（任意翻页方式都同步墨迹"按页记忆"）
+        _bridge = new PptComBridge();
+        _bridge.CurrentSlideChanged += page =>
+            Dispatcher.UIThread.Post(() => _ink?.SetCurrentPage(page));
+
         // 控制条 → 放映：翻页键击 + 墨迹层页码联动（自绘墨迹按页记忆）
         _console.PrevRequested += () => Dispatcher.UIThread.Post(() =>
         {
             InputNative.SendArrowKey(forward: false);
-            _ink?.NotifyPageChanged(-1);
+            if (!_comPages)                       // COM 接管时页码由轮询校准
+                _ink?.NotifyPageChanged(-1);
         });
         _console.NextRequested += () => Dispatcher.UIThread.Post(() =>
         {
             InputNative.SendArrowKey(forward: true);
-            _ink?.NotifyPageChanged(1);
+            if (!_comPages)
+                _ink?.NotifyPageChanged(1);
         });
 
-        // 页面列表入口（COM 阶段实现缩略图 + 跳页）
+        // 页面列表入口 → 弹出缩略图列表（跳页走 GotoSlide）
         _console.ListRequested += () =>
             Dispatcher.UIThread.Post(() => OnListRequested());
 
@@ -103,6 +117,14 @@ public partial class App : Application
     {
         if (_console is null || _ink is null) return;
 
+        _activeScreen = screen;
+
+        // COM 桥：附着 PowerPoint，取真实页数/当前页并开始轮询校准。
+        // 连接失败（PowerPoint 未运行 / 未放映）则回到内部计数兜底。
+        _comPages = _bridge?.Connect() ?? false;
+        if (_comPages && _bridge is not null && _bridge.CurrentSlide > 0)
+            _ink.SetCurrentPage(_bridge.CurrentSlide);
+
         _ink.AttachTo(screen);      // 墨迹层先就位（控制条保持在最上）
         _console.ShowOn(screen);
         ApplyTool(ConsoleTool.Select);
@@ -112,6 +134,12 @@ public partial class App : Application
     private void HideConsole()
     {
         if (_console is null || _ink is null) return;
+
+        _pageList?.Close();
+        _pageList = null;
+
+        _bridge?.Disconnect();      // 停止轮询，页码回到内部计数
+        _comPages = false;
 
         _ = _console.HideAsync();   // 收回动画结束后窗口隐藏
         _ink.Detach();
@@ -125,10 +153,39 @@ public partial class App : Application
         _ => ConsoleTool.Select,
     };
 
-    /// <summary>页面列表入口——COM 阶段弹出缩略图列表，MVP 先留空。</summary>
+    /// <summary>页面列表入口：弹出缩略图网格（COM 导出 / 兜底页码），点击跳页。</summary>
     private void OnListRequested()
     {
-        // TODO(COM 阶段)：页数 / 缩略图 / 点击跳页
+        if (_activeScreen is null || _ink is null) return;
+
+        // 同一时刻至多一个面板：重复点 ☰ 时只刷新到当前页，不叠窗
+        _pageList?.Close();
+
+        int count = _comPages
+            ? Math.Max(1, _bridge?.SlideCount ?? DemoSlideCount)
+            : DemoSlideCount;
+        int current = _comPages
+            ? Math.Max(1, _bridge?.CurrentSlide ?? _ink.CurrentPage)
+            : _ink.CurrentPage;
+
+        var list = new PageListWindow(_comPages ? _bridge : null, current, OnPageJump);
+        list.Build(count);
+        list.Place(_activeScreen);
+        _pageList = list;
+        list.Show();
+        list.Topmost = true;
+    }
+
+    /// <summary>页面列表跳页：COM 路径走 GotoSlide（轮询校准墨迹页码），兜底路径直设墨迹页码。</summary>
+    private void OnPageJump(int page)
+    {
+        _pageList?.Close();
+        _pageList = null;
+
+        if (_comPages)
+            _bridge?.GotoSlide(page);
+        else
+            _ink?.SetCurrentPage(page);
     }
 
     private void ApplyTool(ConsoleTool tool)

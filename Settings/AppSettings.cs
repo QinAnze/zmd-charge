@@ -17,7 +17,9 @@ public sealed record AppSettings
     public double RippleSpread { get; init; } = 1.0;
 
     public HudPosition HudPosition { get; init; } = HudPosition.TopCenter;
-    public int MonitorIndex { get; init; } = 0;
+
+    /// HUD 所在显示器：-1 => 主显示器（默认）。
+    public int MonitorIndex { get; init; } = -1;
     public string Language { get; init; } = "auto";
     public int LowBatteryThreshold { get; init; } = 20;
     public bool EnableLowBatteryAlert { get; init; } = true;

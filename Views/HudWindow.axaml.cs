@@ -391,9 +391,7 @@ public partial class HudWindow : Window
 
     private void PositionTopCenter()
     {
-        var screens = Screens.All;
-        int idx = Math.Clamp(_settings.MonitorIndex, 0, screens.Count - 1);
-        var screen = screens.Count > idx ? screens[idx] : (Screens.Primary ?? screens.FirstOrDefault());
+        var screen = ResolveScreen(_settings.MonitorIndex);
         if (screen is null) return;
 
         var area = screen.WorkingArea;
@@ -410,6 +408,23 @@ public partial class HudWindow : Window
         };
 
         Position = new PixelPoint(x, area.Y + 4);
+    }
+
+    /// <summary>
+    /// 解析目标显示器：-1 = 主显示器（默认），0..N-1 = 显示器列表索引，越界退回主显示器。
+    /// </summary>
+    private Avalonia.Platform.Screen? ResolveScreen(int monitorIndex)
+    {
+        var screens = Screens.All;
+        var primary = Screens.Primary;
+
+        if (monitorIndex < 0)
+            return primary ?? screens.FirstOrDefault();
+
+        if (monitorIndex < screens.Count)
+            return screens[monitorIndex];
+
+        return primary ?? screens.FirstOrDefault();
     }
 
     private void ShowPositioned()

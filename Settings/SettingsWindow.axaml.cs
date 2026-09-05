@@ -201,6 +201,14 @@ public partial class SettingsWindow : Window
     {
         var screens = Screens.All;
         MonitorCombo.Items.Clear();
+
+        // 第一项：主显示器（默认），MonitorIndex 存 -1
+        MonitorCombo.Items.Add(new ComboBoxItem
+        {
+            Content = Localization.MonitorPrimaryDefault,
+            Tag = -1,
+        });
+
         for (int i = 0; i < screens.Count; i++)
         {
             var s = screens[i];
@@ -210,9 +218,6 @@ public partial class SettingsWindow : Window
                 Tag = i,
             });
         }
-
-        if (MonitorCombo.Items.Count == 0)
-            MonitorCombo.Items.Add(new ComboBoxItem { Content = Localization.MonitorDefault, Tag = 0 });
     }
 
     // ---------------- 加载 / 收集 ----------------
@@ -225,8 +230,10 @@ public partial class SettingsWindow : Window
         RippleIntensitySlider.Value = s.RippleIntensity;
         RippleSpreadSlider.Value = s.RippleSpread;
         PositionCombo.SelectedIndex = (int)s.HudPosition;
-        MonitorCombo.SelectedIndex = s.MonitorIndex >= 0 && s.MonitorIndex < MonitorCombo.Items.Count
-            ? s.MonitorIndex
+        // 下拉第一项是「主显示器（默认）」(-1)，物理显示器 i 对应下拉第 i+1 项
+        int monitorSel = s.MonitorIndex < 0 ? 0 : s.MonitorIndex + 1;
+        MonitorCombo.SelectedIndex = monitorSel >= 0 && monitorSel < MonitorCombo.Items.Count
+            ? monitorSel
             : 0;
 
         LanguageCombo.SelectedIndex = s.Language switch

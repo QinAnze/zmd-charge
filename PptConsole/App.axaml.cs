@@ -21,7 +21,7 @@ public enum ConsoleTool
 
 public partial class App : Application
 {
-    private ConsoleWindow? _console;
+    private ConsoleController? _console;
     private InkOverlayWindow? _ink;
     private SlideshowWatcher? _watcher;
     private TrayIcon? _tray;
@@ -40,7 +40,7 @@ public partial class App : Application
         _desktop = desktop;
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        _console = new ConsoleWindow();
+        _console = new ConsoleController();
         _ink = new InkOverlayWindow();
 
         // 控制条 → 放映：翻页键击 + 墨迹层页码联动（自绘墨迹按页记忆）
@@ -55,8 +55,12 @@ public partial class App : Application
             _ink?.NotifyPageChanged(1);
         });
 
+        // 页面列表入口（COM 阶段实现缩略图 + 跳页）
+        _console.ListRequested += () =>
+            Dispatcher.UIThread.Post(() => OnListRequested());
+
         // 控制条 → 墨迹层：工具联动（选择=穿透；笔/橡皮=接管）+ 面板设置
-        _console.ToolChanged += tool => Dispatcher.UIThread.Post(() => ApplyTool(tool));
+        _console.ToolChanged += tool => Dispatcher.UIThread.Post(() => ApplyTool(MapTool(tool)));
         _console.PenSettingsChanged += (color, thickness) =>
             Dispatcher.UIThread.Post(() => _ink?.SetPenSettings(color, thickness));
         _console.EraserSettingsChanged += radius =>
@@ -109,8 +113,22 @@ public partial class App : Application
     {
         if (_console is null || _ink is null) return;
 
-        _ = _console.HideAnimatedAsync();   // 收回动画结束后窗口隐藏
+        _ = _console.HideAsync();   // 收回动画结束后窗口隐藏
         _ink.Detach();
+    }
+
+    /// <summary>中心窗口工具枚举 → 应用层工具枚举。</summary>
+    private static ConsoleTool MapTool(CenterCapsuleWindow.Tool tool) => tool switch
+    {
+        CenterCapsuleWindow.Tool.Pen => ConsoleTool.Pen,
+        CenterCapsuleWindow.Tool.Eraser => ConsoleTool.Eraser,
+        _ => ConsoleTool.Select,
+    };
+
+    /// <summary>页面列表入口——COM 阶段弹出缩略图列表，MVP 先留空。</summary>
+    private void OnListRequested()
+    {
+        // TODO(COM 阶段)：页数 / 缩略图 / 点击跳页
     }
 
     private void ApplyTool(ConsoleTool tool)
@@ -172,7 +190,7 @@ public partial class App : Application
         // 左键托盘：手动吊起/收回（调试与无放映场景）
         _tray.Clicked += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (_console is { IsVisible: true })
+            if (_console is { IsShown: true })
             {
                 HideConsole();
             }

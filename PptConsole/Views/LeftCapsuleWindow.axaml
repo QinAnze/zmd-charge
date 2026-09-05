@@ -1,0 +1,56 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="PptConsole.Views.LeftCapsuleWindow"
+        Title="PptConsole.Left">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://PptConsole/Styles/Geometries.axaml"/>
+        <ResourceInclude Source="avares://PptConsole/Styles/ConsoleTheme.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <!-- 左短胶囊：列表 + 上一页 -->
+  <Border x:Name="Pill" Width="150" Height="56" CornerRadius="28"
+          Background="#FF312F30"
+          BorderBrush="#24E9E7E4" BorderThickness="1"
+          ClipToBounds="True" Opacity="0">
+    <Border.RenderTransform>
+      <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+    </Border.RenderTransform>
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="1"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <Border x:Name="ListZone" Grid.Column="0" Background="Transparent"
+              CornerRadius="28,0,0,28" ClipToBounds="True">
+        <Grid>
+          <Canvas x:Name="ListCanvas"/>
+          <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.List}"
+                    Foreground="#CCFFFFFF"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+
+      <Rectangle Grid.Column="1" Fill="#FF3B393A" Margin="0,16"/>
+
+      <Border x:Name="PrevZone" Grid.Column="2" Background="Transparent"
+              CornerRadius="0,28,28,0" ClipToBounds="True">
+        <Grid>
+          <Canvas x:Name="PrevCanvas"/>
+          <PathIcon Width="18" Height="18" Data="{DynamicResource Geo.ChevronLeft}"
+                    Foreground="#CCFFFFFF"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

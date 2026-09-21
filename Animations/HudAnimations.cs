@@ -25,6 +25,28 @@ public sealed record AnimationOptions
     /// <summary>波纹幅度倍率 0.5~1.5。</summary>
     public double RippleSpread { get; init; } = 1.0;
 
+    // ---------------- macOS 刘海"出生与分离"前导 ----------------
+    // 仅在 macOS 刘海屏启用（HudWindow 依据 NotchBirthGeometry 填充）。
+    // 全为 0 / 1 时（Windows 与无刘海屏）所有前导轨道退化为无操作，行为与改动前逐帧一致。
+
+    /// <summary>前导时长（秒）。0 = 不播放。</summary>
+    public double BirthLeadSeconds { get; init; }
+
+    /// <summary>出生状态 BirthHost 的 Y 位移（BirthHost 坐标系单位）。</summary>
+    public double BirthOffsetY { get; init; }
+
+    /// <summary>出生状态 BirthHost 的 X 位移；居中缩放时保持为零。</summary>
+    public double BirthOffsetX { get; init; }
+
+    /// <summary>出生状态胶囊的 X 缩放（窄条宽 / 560）。</summary>
+    public double BirthScaleX { get; init; } = 1.0;
+
+    /// <summary>出生状态胶囊的 Y 缩放（窄条高 / 60）。</summary>
+    public double BirthScaleY { get; init; } = 1.0;
+
+    /// <summary>是否播放出生前导。</summary>
+    public bool HasBirthLead => BirthLeadSeconds > 0.001d;
+
     public static AnimationOptions Default { get; } = new();
 
     public static AnimationOptions FromSettings(AppSettings s) => new()
@@ -74,6 +96,9 @@ internal static class HudAnimations
     private const double THoldC = 0.86;
     private const double TClose = 0.89;
 
+    /// <summary>macOS 出生前导在基线上的终点，实际时长由 BirthLeadSeconds 决定。</summary>
+    private const double TBirthEnd = 0.07;
+
     private const double TNumIn = 0.38;     // 电量数字开始淡入（等 C 态稳定后约 0.1s）
     private const double TNumReady = 0.42;  // 电量数字淡入完成
 
@@ -95,14 +120,45 @@ internal static class HudAnimations
         new(0.175, 0.885, 0.32, 1d + o.BounceStrength);
 
     /// <summary>
+    /// 入场段允许占用的最大时间比例。
+    /// 原实现让入场段固定占 <c>0.42×6s=2.52s</c>；当 DurationSeconds=3 时剩余只有 0.48s，
+    /// 出场段（基线 0.86→0.89）被压到约 130ms，看起来像瞬间消失。
+    /// 这里加一道上限，同时保证 macOS 出生前导（+0.28s）不会把 rest 段挤成负数。
+    /// </summary>
+    private const double MaxIntroFraction = 0.70;
+
+    /// <summary>入场段实际占用的时间比例（含 macOS 出生前导）。</summary>
+    private static double IntroFraction(AnimationOptions o, double baselineSeconds)
+    {
+        double d = Math.Clamp(o.DurationSeconds, 3d, 10d);
+        double lead = o.HasBirthLead ? o.BirthLeadSeconds : 0d;
+        double desired = (IntroEndCue * baselineSeconds + lead) / d;
+        return Math.Min(desired, MaxIntroFraction);
+    }
+
+    /// <summary>
     /// 基线 cue → 实际时间线 cue。
-    /// 入场段（≤0.42）固定占 0.42×6s=2.52s，剩余时间全给停留+退出段线性分配。
-    /// DurationSeconds=6 时为恒等映射。
+    ///
+    /// · 入场段（≤ <see cref="IntroEndCue"/>）：按 introFrac 线性铺开。因为
+    ///   <c>introFrac ∝ (0.42×6 + 前导)</c>，插入前导后入场段会被**整体等比拉伸**而非只多加一段，
+    ///   所以三态内部各步的相对节奏（以及回弹/波纹参数）完全不变。
+    /// · 其余段：在剩余时间内线性分配 —— 即只把停留段等比缩短，
+    ///   令"入场 + 停留 + 退出"总时长仍等于用户设置的 DurationSeconds。
+    /// DurationSeconds=6 且无前导时是恒等映射（与改动前逐帧一致）。
     /// </summary>
     private static double MapCue(AnimationOptions o, double cue)
     {
-        double d = Math.Clamp(o.DurationSeconds, 3d, 10d);
-        double introFrac = IntroEndCue * BaselineSeconds / d;
+        if (o.HasBirthLead)
+        {
+            double duration = Math.Clamp(o.DurationSeconds, 3d, 10d);
+            double lead = o.BirthLeadSeconds / duration;
+            double introEnd = IntroFraction(o, BaselineSeconds);
+            if (cue <= TBirthEnd) return cue / TBirthEnd * lead;
+            if (cue <= IntroEndCue)
+                return lead + (cue - TBirthEnd) / (IntroEndCue - TBirthEnd) * (introEnd - lead);
+            return introEnd + (cue - IntroEndCue) / (1d - IntroEndCue) * (1d - introEnd);
+        }
+        double introFrac = IntroFraction(o, BaselineSeconds);
         if (cue <= IntroEndCue)
             return cue / IntroEndCue * introFrac;
         return introFrac + (cue - IntroEndCue) / (1 - IntroEndCue) * (1 - introFrac);
@@ -129,6 +185,18 @@ internal static class HudAnimations
     public static Animation PillAppear(AnimationOptions o)
     {
         var a = New(o);
+
+        if (o.HasBirthLead)
+        {
+            // 出生前导启用：胶囊的 scale 由 BirthPillScale 全程驱动（含 560×60 → 保持），
+            // 本轨道不再写 scaleX/scaleY —— 否则两条动画同时写同一属性会互相覆盖，
+            // 且会把前导算好的窄条尺寸在 TPillOut 处重新"弹"一次。
+            // 可见性同样已由前导开头的 Op(1) 建立，这里只需保持。
+            a.Children.Add(KF(MapCue(o, 0d), null, Op(1)));
+            a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1)));
+            return a;
+        }
+
         a.Children.Add(KF(MapCue(o, 0d), null, Op(0), SX(0.6), SY(0.6)));
         a.Children.Add(KF(MapCue(o, TStart), KS_In, Op(0), SX(0.6), SY(0.6)));
         a.Children.Add(KF(MapCue(o, TAppear), KS_In, Op(0), SX(0.6), SY(0.6)));
@@ -147,16 +215,103 @@ internal static class HudAnimations
         var a = New(o);
         a.Children.Add(KF(MapCue(o, 0d), null, H(PillHeightA)));
         a.Children.Add(KF(MapCue(o, TAppear), KS_In, H(PillHeightA)));
-        a.Children.Add(KF(MapCue(o, TExpand), BackOut(o), H(PillHeightB)));
+        a.Children.Add(KF(MapCue(o, TExpand), BackOut(o.HasBirthLead ? o with { BounceStrength = o.BounceStrength * 0.55d } : o), H(PillHeightB)));
         a.Children.Add(KF(MapCue(o, THoldB), KS_In, H(PillHeightB)));
         a.Children.Add(KF(MapCue(o, TContract), KS_InOut, H(PillHeightA)));
         a.Children.Add(KF(MapCue(o, THoldC), KS_In, H(PillHeightA)));
         return a;
     }
 
+    // ---------------- macOS 刘海出生前导 ----------------
+
+    // 返回用固定 360ms 运动 + 100ms 淡出；完整/简化轨道共用相同时间点。
+    // 保持总时长不变，最短 3s 配置下也不会把返回运动压缩成瞬移。
+    private static double ReturnStart(AnimationOptions o, bool simple = false)
+    {
+        double duration = Math.Clamp(o.DurationSeconds, 3d, 10d);
+        double hold = simple ? MapCueSimple(o, TSimpleHold) : MapCue(o, THoldC);
+        return Math.Min(hold, 1d - 0.46d / duration);
+    }
+
+    private static double ReturnEnd(AnimationOptions o, bool simple = false)
+        => ReturnStart(o, simple) + 0.36d / Math.Clamp(o.DurationSeconds, 3d, 10d);
+
+    private static void AddReturnOffset(Animation a, AnimationOptions o, bool simple = false)
+    {
+        if (!o.HasBirthLead) return;
+        a.Children.Add(KF(ReturnStart(o, simple), KS_In, TX(0d), TY(0d)));
+        a.Children.Add(KF(ReturnStart(o, simple) + (ReturnEnd(o, simple) - ReturnStart(o, simple)) * 0.7d,
+            KS_Smooth, TX(o.BirthOffsetX), TY(o.BirthOffsetY * 0.45d)));
+        a.Children.Add(KF(ReturnEnd(o, simple), KS_In, TX(o.BirthOffsetX), TY(o.BirthOffsetY)));
+    }
+
+    private static void AddReturnContentFade(Animation a, AnimationOptions o, bool simple = false)
+    {
+        if (!o.HasBirthLead) return;
+        a.Children.Add(KF(ReturnStart(o, simple) + 0.1d / Math.Clamp(o.DurationSeconds, 3d, 10d), KS_Out, Op(0d)));
+    }
+
+    private static Animation ReturnVisibility(AnimationOptions o, bool simple = false)
+    {
+        var a = New(o);
+        a.Children.Add(KF(0d, null, SX(1d), SY(1d), Op(1d)));
+        a.Children.Add(KF(ReturnEnd(o, simple), KS_In, SX(1d), SY(1d), Op(1d)));
+        a.Children.Add(KF(ReturnEnd(o, simple) + 0.1d / Math.Clamp(o.DurationSeconds, 3d, 10d), KS_Out, Op(0d)));
+        return a;
+    }
+
+    /// <summary>
+    /// 出生位移：把整段 HUD 从刘海内部的位置向下分离到最终位置。
+    /// 驱动 <c>BirthHost</c> 的独立 TranslateTransform。
+    ///
+    /// 无前导时（Windows / 无刘海）本轨道只是把 (0,0) 保持到 TExpand，等价于无操作。
+    /// 位移一律用 KS_Smooth（easeInOutCubic），避免回弹曲线在前 20% 跑完 80% 行程造成"瞬移"。
+    /// </summary>
+    public static Animation BirthOffset(AnimationOptions o)
+    {
+        double fromX = o.HasBirthLead ? o.BirthOffsetX : 0d;
+        double fromY = o.HasBirthLead ? o.BirthOffsetY : 0d;
+
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, TX(fromX), TY(fromY)));
+        if (o.HasBirthLead)
+            a.Children.Add(KF(MapCue(o, TBirthEnd * 0.3d), KS_Out, TX(fromX), TY(fromY * 0.45d)));
+        a.Children.Add(KF(MapCue(o, TBirthEnd), KS_Smooth, TX(0d), TY(0d)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_In, TX(0d), TY(0d)));
+        AddReturnOffset(a, o, false);
+        return a;
+    }
+
+    /// <summary>
+    /// 先保持窄条离开刘海，再绕顶边中心展开；收起时还原相同尺寸。
+    /// </summary>
+    public static Animation BirthPillScale(AnimationOptions o)
+    {
+        if (!o.HasBirthLead)
+        {
+            // 与改动前的 PillAppear 完全相同的 scale 轨道
+            var plain = New(o);
+            plain.Children.Add(KF(MapCue(o, 0d), null, SX(0.6), SY(0.6)));
+            plain.Children.Add(KF(MapCue(o, TStart), KS_In, SX(0.6), SY(0.6)));
+            plain.Children.Add(KF(MapCue(o, TAppear), KS_In, SX(0.6), SY(0.6)));
+            plain.Children.Add(KF(MapCue(o, TPillOut), BackOut(o), SX(1d), SY(1d)));
+            plain.Children.Add(KF(MapCue(o, THoldC), KS_In, SX(1d), SY(1d)));
+            return plain;
+        }
+
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, SX(o.BirthScaleX), SY(o.BirthScaleY)));
+        a.Children.Add(KF(MapCue(o, TBirthEnd * 0.3d), KS_Out, SX(o.BirthScaleX), SY(o.BirthScaleY)));
+        a.Children.Add(KF(MapCue(o, TBirthEnd), KS_Smooth, SX(1d), SY(1d)));
+        a.Children.Add(KF(ReturnStart(o), KS_In, SX(1d), SY(1d)));
+        a.Children.Add(KF(ReturnEnd(o), KS_Smooth, SX(o.BirthScaleX), SY(o.BirthScaleY)));
+        return a;
+    }
+
     /// <summary>收尾整体缩小（scale 1→0），ease-in 慢起快收。</summary>
     public static Animation ScaleOut(AnimationOptions o)
     {
+        if (o.HasBirthLead) return ReturnVisibility(o, false);
         var a = New(o);
         a.Children.Add(KF(MapCue(o, 0d), null, SX(1d), SY(1d)));
         a.Children.Add(KF(MapCue(o, THoldC), KS_In, SX(1d), SY(1d)));
@@ -173,13 +328,14 @@ internal static class HudAnimations
     {
         var a = New(o);
         a.Children.Add(KF(MapCue(o, 0.00), null, Op(0), SX(0.4), SY(0.4), TX(0)));
-        a.Children.Add(KF(MapCue(o, TStart), KS_In, Op(0), SX(0.4), SY(0.4), TX(0)));
+        a.Children.Add(KF(MapCue(o, o.HasBirthLead ? TBirthEnd : TStart), KS_In, Op(0), SX(0.4), SY(0.4), TX(0)));
         a.Children.Add(KF(MapCue(o, TBoltPop), BackOut(o), Op(1), SX(1.12), SY(1.12), TX(0)));
         a.Children.Add(KF(MapCue(o, TExpand), KS_Out, Op(1), SX(1), SY(1), TX(0)));
         a.Children.Add(KF(MapCue(o, TMove), KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetB)));
         a.Children.Add(KF(MapCue(o, THoldB), KS_In, Op(1), SX(1), SY(1), TX(IconOffsetB)));
         a.Children.Add(KF(MapCue(o, TContract), KS_Smooth, Op(1), SX(1), SY(1), TX(IconOffsetC)));
-        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        a.Children.Add(KF(o.HasBirthLead ? ReturnStart(o, false) : MapCue(o, THoldC), KS_In, Op(1), SX(1), SY(1), TX(IconOffsetC)));
+        AddReturnContentFade(a, o, false);
         return a;
     }
 
@@ -243,7 +399,8 @@ internal static class HudAnimations
         a.Children.Add(KF(MapCue(o, TContract), KS_In, Op(0)));  // C 态已就绪，隐藏
         a.Children.Add(KF(MapCue(o, TNumIn), KS_In, Op(0)));     // 保持隐藏
         a.Children.Add(KF(MapCue(o, TNumReady), KS_Out, Op(1))); // 淡入完成
-        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1)));
+        a.Children.Add(KF(o.HasBirthLead ? ReturnStart(o, false) : MapCue(o, THoldC), KS_In, Op(1)));
+        AddReturnContentFade(a, o, false);
         return a;
     }
 
@@ -296,7 +453,7 @@ internal static class HudAnimations
     private static double MapCueSimple(AnimationOptions o, double cue)
     {
         double d = Math.Clamp(o.DurationSeconds, 3d, 10d);
-        double introFrac = SimpleIntroEndCue * SimpleBaselineSeconds / d;
+        double introFrac = (o.HasBirthLead ? o.BirthLeadSeconds + 0.1d : SimpleIntroEndCue * SimpleBaselineSeconds) / d;
         if (cue <= SimpleIntroEndCue)
             return cue / SimpleIntroEndCue * introFrac;
         return introFrac + (cue - SimpleIntroEndCue) / (1 - SimpleIntroEndCue) * (1 - introFrac);
@@ -306,9 +463,13 @@ internal static class HudAnimations
     public static Animation SimplePillAppear(AnimationOptions o)
     {
         var a = NewSimple(o);
-        a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0), SX(0.6), SY(0.6)));
-        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_Out, Op(1), SX(1d), SY(1d)));
-        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0), SX(o.HasBirthLead ? o.BirthScaleX : 0.6), SY(o.HasBirthLead ? o.BirthScaleY : 0.6)));
+        if (o.HasBirthLead)
+            a.Children.Add(KF(MapCueSimple(o, TSimpleAppear * 0.3d), KS_Out, Op(1), SX(o.BirthScaleX), SY(o.BirthScaleY)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_Smooth, Op(1), SX(1d), SY(1d)));
+        a.Children.Add(KF(o.HasBirthLead ? ReturnStart(o, true) : MapCueSimple(o, TSimpleHold), KS_In, Op(1), SX(1d), SY(1d)));
+        if (o.HasBirthLead)
+            a.Children.Add(KF(ReturnEnd(o, true), KS_Smooth, SX(o.BirthScaleX), SY(o.BirthScaleY)));
         return a;
     }
 
@@ -322,13 +483,37 @@ internal static class HudAnimations
         a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0)));
         a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_In, Op(0)));
         a.Children.Add(KF(MapCueSimple(o, TSimpleAppear + 0.03), KS_Out, Op(1)));
-        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, Op(1)));
+        a.Children.Add(KF(o.HasBirthLead ? ReturnStart(o, true) : MapCueSimple(o, TSimpleHold), KS_In, Op(1)));
+        AddReturnContentFade(a, o, true);
+        return a;
+    }
+
+    /// <summary>
+    /// 简化版的出生位移：拔电胶囊同样"从刘海内部向下分离"。
+    /// 只驱动窗口位移，不参与胶囊自身的弹出缩放（那条轨道保持原样），
+    /// 因此拔电依旧是"快速显现"的观感，只是多了从刘海处落下的运动。
+    /// 无前导时退化为 (0,0) 常值，等价于无操作。
+    /// </summary>
+    public static Animation SimpleBirthOffset(AnimationOptions o)
+    {
+        double fromX = o.HasBirthLead ? o.BirthOffsetX : 0d;
+        double fromY = o.HasBirthLead ? o.BirthOffsetY : 0d;
+
+        var a = NewSimple(o);
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, TX(fromX), TY(fromY)));
+        if (o.HasBirthLead)
+            a.Children.Add(KF(MapCueSimple(o, TSimpleAppear * 0.3d), KS_Out, TX(fromX), TY(fromY * 0.45d)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleAppear), KS_Smooth, TX(0d), TY(0d)));
+        if (!o.HasBirthLead)
+            a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, TX(0d), TY(0d)));
+        AddReturnOffset(a, o, true);
         return a;
     }
 
     /// <summary>收尾整体缩小（scale 1→0），ease-in 慢起快收。</summary>
     public static Animation SimpleScaleOut(AnimationOptions o)
     {
+        if (o.HasBirthLead) return ReturnVisibility(o, true);
         var a = NewSimple(o);
         a.Children.Add(KF(MapCueSimple(o, 0d), null, SX(1d), SY(1d)));
         a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, SX(1d), SY(1d)));

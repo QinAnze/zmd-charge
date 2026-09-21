@@ -6,10 +6,17 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Avalonia.Threading;
 
 namespace EndfieldCharge.Views;
 
+/// <summary>
+/// Windows 专属：自绘深色托盘菜单。左键托盘图标时由 <c>App</c> 弹出。
+///
+/// 为什么 macOS 不用它：Avalonia 的 macOS 后端（<c>AvnTrayIcon</c>）只实现
+/// <c>setMenu:</c>，<c>TrayIcon.Clicked</c> 永不触发，因此无法确定"点击了托盘图标"
+/// 这一时机，也没有可用的锚点来做 popup 定位。macOS 侧改用原生 <c>NativeMenu</c>
+/// （见 Platform/MacOS/MacOSTrayMenu.cs）。
+/// </summary>
 public partial class TrayMenuWindow : Window
 {
     public event Action? PreviewClicked;

@@ -349,11 +349,14 @@ public partial class SettingsWindow : Window
         var settings = CollectSettings();
         SettingsManager.Save(settings);
 
-        // 处理开机自启
-        if (settings.EnableAutoStart)
-            Services.AutoStart.Enable(Services.AutoStart.CurrentExePath);
-        else
-            Services.AutoStart.Disable();
+        // 处理开机自启（平台实现：Windows 写注册表 Run 键；macOS 写 LaunchAgent plist）
+        if (App.Platform is { } platform)
+        {
+            if (settings.EnableAutoStart)
+                platform.AutoStart.Enable();
+            else
+                platform.AutoStart.Disable();
+        }
 
         if (Application.Current is App app)
             app.OnSettingsChanged(settings);
@@ -379,6 +382,9 @@ public partial class SettingsWindow : Window
             var (hasUpdate, version, url) = await Services.UpdateChecker.CheckAsync();
             if (hasUpdate && url is not null)
             {
+                // macOS Accessory 策略下，对话框需要先激活应用才能到前台
+                App.Platform?.ActivateForDialog();
+
                 var result = await MessageBox.Show(
                     this,
                     Localization.UpdateMsg(version ?? "?"),
@@ -386,7 +392,7 @@ public partial class SettingsWindow : Window
                     MessageBoxButton.OkCancel);
 
                 if (result == MessageBoxResult.Ok)
-                    Platform.Start(url);
+                    ShellOpen.Start(url);
             }
             else
             {
@@ -415,7 +421,7 @@ public partial class SettingsWindow : Window
 
         try
         {
-            Platform.Start(fontUrl);
+            ShellOpen.Start(fontUrl);
             await Task.Delay(500);
             FontStatusText.Text = Localization.FontInstalled;
         }
@@ -450,7 +456,7 @@ public static class MessageBox
             Foreground = Brushes.White,
             CanResize = false,
             SystemDecorations = SystemDecorations.None,
-            FontFamily = new FontFamily("HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif"),
+            FontFamily = new FontFamily("HarmonyOS Sans SC, HarmonyOS Sans, Inter, PingFang SC, Microsoft YaHei UI, Hiragino Sans GB, sans-serif"),
         };
 
         var result = MessageBoxResult.Ok;
@@ -507,7 +513,7 @@ public static class MessageBox
     }
 }
 
-internal static class Platform
+internal static class ShellOpen
 {
     public static void Start(string url)
     {

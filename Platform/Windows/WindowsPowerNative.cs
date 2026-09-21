@@ -5,7 +5,7 @@ using System.Runtime.Versioning;
 namespace EndfieldCharge.Services;
 
 /// <summary>
-/// Windows 电源 / 电池相关的原生 API。
+/// Windows 电源 / 电池相关的原生 API（仅 Windows 目标编译）。
 /// 两条读取路径：
 ///   1. powrprof!CallNtPowerInformation(SystemBatteryState) —— 主路径，同步、无 WMI 开销，直接给 mWh。
 ///   2. WMI Win32_Battery —— 兜底，部分机型 powrprof 返回 MaxCapacity=0。
@@ -13,7 +13,7 @@ namespace EndfieldCharge.Services;
 ///   RegisterPowerSettingNotification + 隐藏消息窗，接收 WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE。
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal static class PowerNative
+internal static class WindowsPowerNative
 {
     // ---------- CallNtPowerInformation ----------
 

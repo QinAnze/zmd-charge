@@ -23,11 +23,18 @@ public static class Localization
         }
     }
 
+    /// <summary>当前是否运行在 macOS（用于平台相关文案分支）。</summary>
+    private static bool IsMacOS => OperatingSystem.IsMacOS();
+
     // ---- HUD ----
     public static string TagLine => IsChinese ? "/// 超充模式" : "/// SUPER CHARGE MODE";
     public static string TitleMode => IsChinese ? "超充模式" : "Super Charge Mode";
-    public static string TagLineSaver => IsChinese ? "/// 省电模式" : "/// POWER SAVING MODE";
-    public static string TitleSaver => IsChinese ? "省电模式" : "Power Saving Mode";
+    public static string TagLineSaver => IsMacOS
+        ? (IsChinese ? "/// 低电量模式" : "/// LOW POWER MODE")
+        : (IsChinese ? "/// 省电模式" : "/// POWER SAVING MODE");
+    public static string TitleSaver => IsMacOS
+        ? (IsChinese ? "低电量模式" : "Low Power Mode")
+        : (IsChinese ? "省电模式" : "Power Saving Mode");
 
     // ---- 托盘菜单 ----
     public static string PreviewHud => IsChinese ? "预览电量 HUD" : "Preview Power HUD";
@@ -60,7 +67,9 @@ public static class Localization
     public static string SectionPosition => IsChinese ? "位置与语言" : "Position & Language";
     public static string SectionStartup => IsChinese ? "启动" : "Startup";
     public static string SectionAlertSettings => IsChinese ? "提醒设置" : "Alert Settings";
-    public static string DescAutoStart => IsChinese ? "登录 Windows 时自动启动" : "Auto start on Windows login";
+    public static string DescAutoStart => IsMacOS
+        ? (IsChinese ? "登录 macOS 时自动启动（写入 ~/Library/LaunchAgents）" : "Auto start on macOS login (writes a LaunchAgent)")
+        : (IsChinese ? "登录 Windows 时自动启动" : "Auto start on Windows login");
     public static string DescLowBatteryAlert => IsChinese ? "电量低于阈值时弹窗提醒" : "Alert when battery drops below threshold";
     public static string DescFullChargeAlert => IsChinese ? "电池充满后弹窗通知" : "Notify when battery is fully charged";
 
@@ -85,13 +94,17 @@ public static class Localization
     public static string LabelPlayMode => IsChinese ? "播放模式" : "Play Mode";
     public static string ModePlug => IsChinese ? "插电（完整三态）" : "Plug In (Full Sequence)";
     public static string ModeUnplug => IsChinese ? "拔电（简化胶囊）" : "Unplug (Simple Capsule)";
-    public static string ModeSaver => IsChinese ? "省电模式（完整三态）" : "Battery Saver (Full Sequence)";
+    public static string ModeSaver => IsMacOS
+        ? (IsChinese ? "低电量模式（完整三态）" : "Low Power Mode (Full Sequence)")
+        : (IsChinese ? "省电模式（完整三态）" : "Battery Saver (Full Sequence)");
 
     // ---- 通知 ----
-    public static string LabelPowerSaverNotify => IsChinese ? "省电模式切换提示" : "Battery Saver Toggle Notify";
-    public static string PowerSaverNotifyDesc => IsChinese
-        ? "开启 / 关闭系统省电模式时显示 HUD"
-        : "Show HUD when battery saver is toggled";
+    public static string LabelPowerSaverNotify => IsMacOS
+        ? (IsChinese ? "低电量模式切换提示" : "Low Power Mode Toggle Notify")
+        : (IsChinese ? "省电模式切换提示" : "Battery Saver Toggle Notify");
+    public static string PowerSaverNotifyDesc => IsMacOS
+        ? (IsChinese ? "开启 / 关闭系统低电量模式时显示 HUD" : "Show HUD when Low Power Mode is toggled")
+        : (IsChinese ? "开启 / 关闭系统省电模式时显示 HUD" : "Show HUD when battery saver is toggled");
     public static string LabelUpdateCheck => IsChinese ? "自动检查更新" : "Auto Check for Updates";
     public static string LabelAutoStart => IsChinese ? "开机自启" : "Auto Start";
     public static string BtnCheckUpdate => IsChinese ? "检查更新" : "Check Now";

@@ -1,43 +1,109 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ============================================================
+       多平台目标框架
+       Windows : net8.0-windows —— 保持既有发布链路（框架依赖单文件 + .NET 8 Desktop Runtime）
+       macOS   : net10.0        —— 目标机型无 net8 共享运行时，走 self-contained
+       判定用 $(OS)（MSBuild 内置属性）：CI 的 windows-latest 上恒为 Windows_NT，
+       本地 macOS 上恒不成立，与是否传 RID 无关。
+       可用 -p:TargetFramework=net10.0 显式覆盖。
+       ============================================================ -->
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == '' And '$(OS)' == 'Windows_NT'">net8.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- ============================================================
+       平台编译符号：显式自定义，不依赖 TFM 隐式定义的 WINDOWS
+       平台实现目录通过对侧 Compile Remove 隔离（见文件末尾 ItemGroup）
+       ============================================================ -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <DefineConstants>$(DefineConstants);ENDFIELD_WINDOWS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net8.0-windows'">
+    <DefineConstants>$(DefineConstants);ENDFIELD_MACOS</DefineConstants>
+  </PropertyGroup>
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType Condition="'$(TargetFramework)' == 'net8.0-windows'">WinExe</OutputType>
+    <OutputType Condition="'$(TargetFramework)' != 'net8.0-windows'">Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <!-- SettingsWindow 只在代码中带参构造，XAML 运行时加载器警告为误报 -->
     <NoWarn>$(NoWarn);AVLN3001</NoWarn>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\tray_bolt.ico</ApplicationIcon>
     <AssemblyName>EndfieldCharge</AssemblyName>
     <RootNamespace>EndfieldCharge</RootNamespace>
     <Authors>Lenkmat</Authors>
     <Company>Lenkmat</Company>
     <Copyright>Copyright © 2026 Lenkmat</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- ============ Windows 专属 ============ -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <PlatformTarget>x64</PlatformTarget>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\tray_bolt.ico</ApplicationIcon>
     <!-- 单文件发布，方便丢进开机启动 -->
-    <PublishSingleFile Condition="'$(Configuration)'=='Release'">true</PublishSingleFile>
-    <SelfContained Condition="'$(Configuration)'=='Release'">false</SelfContained>
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">false</SelfContained>
     <!-- 无条件下发给 restore：CI 里 restore 不带 -c Release，若只有条件 RuntimeIdentifier，
          assets 里就不会有 net8.0-windows/win-x64 目标，build/publish 会报
          "Assets file doesn't have a target for 'net8.0-windows/win-x64'" -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <RuntimeIdentifier Condition="'$(Configuration)'=='Release'">win-x64</RuntimeIdentifier>
-    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <RuntimeIdentifier Condition="'$(Configuration)' == 'Release'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
+  <!-- ============ macOS 专属 ============
+       .app bundle 本身即最好的封装，关闭 PublishSingleFile；
+       self-contained 避免要求用户另装 .NET 运行时。
+       RuntimeIdentifier 只在 Release + Darwin 下默认设置，Debug 保持 RID-less（构建更快）。 -->
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net8.0-windows'">
+    <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(Configuration)' == 'Release' And '$(RuntimeIdentifier)' == '' And '$(OS)' == 'Darwin'">osx-arm64</RuntimeIdentifier>
+    <UseAppHost>true</UseAppHost>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+    <!-- 允许在非 Windows 主机上恢复 Windows 目标（跨平台 CI/开发机用） -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <!-- ============ 包引用 ============ -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.2.1" />
     <PackageReference Include="Avalonia.Desktop" Version="11.2.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1" />
+    <!-- Override Avalonia's transitive 0.20.0 with the security backport for GHSA-xrw6-gwf8-vvr9. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
     <!-- 电池信息兜底读取（主路径是 powrprof P/Invoke，无需此包；WMI 仅作备用） -->
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- ============ 资源与平台文件隔离 ============ -->
   <ItemGroup>
+    <!-- 测试工程是独立项目，不能被主工程的默认 glob 收进来 -->
+    <Compile Remove="tests/**" />
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <Compile Remove="Platform/MacOS/**" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net8.0-windows'">
+    <Compile Remove="Platform/Windows/**" />
+    <Compile Remove="Views/TrayMenuWindow.axaml.cs" />
+    <!-- 必须同时摘掉 AvaloniaXaml：否则 Avalonia 的 x:Name 生成器会为被排除的
+         code-behind 生成 partial，报 AXN0001 "type does not exist in the assembly" -->
+    <AvaloniaXaml Remove="Views/TrayMenuWindow.axaml" />
+    <AvaloniaResource Remove="Assets/tray_bolt.ico" />
+    <None Remove="app.manifest" />
   </ItemGroup>
 
 </Project>

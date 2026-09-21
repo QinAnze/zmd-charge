@@ -1,16 +1,15 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using EndfieldCharge.Services;
 
 namespace EndfieldCharge.Settings;
 
 public static class SettingsManager
 {
-    private static readonly string Folder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "EndfieldCharge");
+    private static readonly string Folder = AppPaths.DataDirectory;
 
-    private static readonly string FilePath = Path.Combine(Folder, "settings.json");
+    private static readonly string FilePath = AppPaths.SettingsFilePath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

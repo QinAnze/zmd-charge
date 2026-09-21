@@ -15,13 +15,19 @@ namespace EndfieldCharge;
 
 public partial class App : Application
 {
-    private PowerWatcher? _watcher;
+    private IPowerMonitor? _watcher;
+    private HudDisplayCoordinator? _hudTrigger;
     private HudWindow? _hud;
     private TrayIcon? _tray;
-    private TrayMenuWindow? _trayMenu;
     private AppSettings _settings = new();
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private bool _lastLowBatteryNotified;
+
+    /// <summary>平台服务（Windows / macOS 由 <see cref="PlatformServices.Create"/> 分发）。</summary>
+    public static IPlatformServices Platform { get; private set; } = null!;
+
+    /// <summary>当前应用实例（HudWindow / SettingsWindow 用来取平台服务与设置）。</summary>
+    public static new App? Current => Application.Current as App;
 
     public override void Initialize()
     {
@@ -39,6 +45,12 @@ public partial class App : Application
         _settings = SettingsManager.Load();
         Localization.UseSettings(_settings);
         Logger.Enabled = true; // 可改为设置项
+
+        // 平台服务：必须在建窗口之前就绪（macOS 需要先设定激活策略，避免 Dock 图标闪现）
+        Platform = PlatformServices.Create();
+        Platform.ApplyAppActivationPolicy();
+
+        Logger.Info($"App: platform={Platform.Name}, bundle={Platform.IsBundle}");
 
         // 全局未捕获异常兜底
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -79,9 +91,8 @@ public partial class App : Application
         Localization.UseSettings(settings);
         _hud?.ApplySettings(settings);
 
-        // 更新托盘提示
-        if (_tray is not null)
-            _tray.ToolTipText = Localization.TrayTooltip;
+        // 更新托盘提示与菜单文案
+        Platform.RefreshTrayLocalization();
     }
 
     // ---------------- 命令行参数 ----------------
@@ -125,66 +136,72 @@ public partial class App : Application
 
     private void StartPowerWatching()
     {
-        _watcher = new PowerWatcher();
+        _watcher = Platform.CreatePowerMonitor();
 
-        _watcher.PowerSourceChanged += (_, acOnline) =>
-        {
-            Dispatcher.UIThread.Post(() =>
+        // 同一物理动作会引发多条事件（macOS 插拔电源时会紧接着自动切低电量模式，
+        // 实测滞后 400ms–2.1s），必须合并，否则后一次 HUD 会把前一次的动画掐断。
+        _hudTrigger = new HudDisplayCoordinator(
+            dispatch: kind =>
             {
-                if (acOnline)
-                    _ = TriggerHudAsync();
-                else
-                    _ = TriggerSimpleHudAsync();
-            });
-        };
+                Dispatcher.UIThread.Post(() =>
+                {
+                    switch (kind)
+                    {
+                        case HudDisplayCoordinator.HudKind.AcConnected:
+                            _ = TriggerHudAsync();
+                            break;
+                        case HudDisplayCoordinator.HudKind.AcDisconnected:
+                            _ = TriggerSimpleHudAsync();
+                            break;
+                        case HudDisplayCoordinator.HudKind.SaverOn:
+                            if (_settings.EnablePowerSaverNotify)
+                                _ = TriggerSaverHudAsync();
+                            break;
+                        case HudDisplayCoordinator.HudKind.SaverOff:
+                            if (_settings.EnablePowerSaverNotify)
+                                _ = TriggerSimpleHudAsync();
+                            break;
+                    }
+                });
+            },
+            // macOS 会在插拔电源时自动跟着切低电量模式 → 该事件是副作用，不单独播。
+            // Windows 的省电模式不会被电源切换改写，用户手动开关必须照常提示。
+            suppressAcCorrelatedSaver: Platform.Name == "macOS");
 
-        // 省电模式开关：开启 → 完整三态（省电文案）；关闭 → 简化电量胶囊
-        _watcher.PowerSavingChanged += (_, enabled) =>
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!_settings.EnablePowerSaverNotify)
-                    return;
-
-                if (enabled)
-                    _ = TriggerSaverHudAsync();
-                else
-                    _ = TriggerSimpleHudAsync();
-            });
-        };
+        _watcher.PowerSourceChanged += (_, acOnline) => _hudTrigger.OnAcChanged(acOnline);
+        _watcher.PowerSavingChanged += (_, enabled) => _hudTrigger.OnSaverChanged(enabled);
 
         _watcher.Start();
     }
 
     private async Task TriggerSaverHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _watcher is null) return;
 
-        var snapshot = await Task.Run(() => BatteryService.GetSnapshot());
+        var monitor = _watcher;
+        var snapshot = await Task.Run(() => monitor.GetSnapshot());
         await _hud.ShowAndPlayAsync(snapshot, acOnline: true, HudPlayMode.PowerSaver);
     }
 
     private async Task TriggerSimpleHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _watcher is null) return;
 
-        var (snapshot, _) = await Task.Run(() =>
-        {
-            PowerNative.TryGetAcOnline(out bool ac);
-            return (BatteryService.GetSnapshot(), ac);
-        });
+        var monitor = _watcher;
+        var snapshot = await Task.Run(() => monitor.GetSnapshot());
 
         await _hud.ShowSimpleAsync(snapshot);
     }
 
     private async Task TriggerHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _watcher is null) return;
 
+        var monitor = _watcher;
         var (snapshot, acOnline) = await Task.Run(() =>
         {
-            PowerNative.TryGetAcOnline(out bool ac);
-            return (BatteryService.GetSnapshot(), ac);
+            monitor.TryGetAcOnline(out bool ac);
+            return (monitor.GetSnapshot(), ac);
         });
 
         await _hud.ShowAndPlayAsync(snapshot, acOnline);
@@ -233,7 +250,7 @@ public partial class App : Application
             CanResize = false,
             SystemDecorations = SystemDecorations.BorderOnly,
             Topmost = true,
-            FontFamily = new Avalonia.Media.FontFamily("HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif"),
+            FontFamily = new Avalonia.Media.FontFamily("HarmonyOS Sans SC, HarmonyOS Sans, Inter, PingFang SC, Microsoft YaHei UI, Hiragino Sans GB, sans-serif"),
         };
 
         var card = new Border
@@ -305,96 +322,93 @@ public partial class App : Application
 
     private void SetupTrayIcon()
     {
-        // 自定义菜单（TrayMenuWindow）：左键托盘弹出。
-        // 不设原生 Menu——11.2 中右键仅在 Menu 非空时弹原生菜单，置空后右键无动作。
-        _tray = new TrayIcon
-        {
-            ToolTipText = Localization.TrayTooltip,
-            IsVisible = true,
-        };
+        // 菜单呈现方式由平台决定：
+        //   Windows —— TrayIcon.Clicked 可用，点击时弹出 TrayMenuWindow 自绘深色菜单
+        //   macOS   —— Clicked 永不触发，改用 NativeMenu（NSStatusItem 左键自动弹出）
+        _tray = Platform.CreateTrayIcon(new TrayMenuActions(
+            OnPreviewRequested,
+            OnSettingsRequested,
+            OnCheckUpdateRequested,
+            ExitApp));
 
-        _tray.Clicked += OnTrayClicked;
-
-        try
-        {
-            var uri = new Uri("avares://EndfieldCharge/Assets/tray_bolt.png");
-            using var stream = AssetLoader.Open(uri);
-            _tray.Icon = new WindowIcon(new Bitmap(stream));
-        }
-        catch
-        {
-        }
+        SetTrayIconImage(_tray);
 
         var icons = new TrayIcons { _tray };
         TrayIcon.SetIcons(this, icons);
     }
 
-    private void OnTrayClicked(object? sender, EventArgs e)
+    /// <summary>托盘图标统一使用 PNG（.ico 仅 Windows 目标引入，macOS 上不支持）。</summary>
+    private static void SetTrayIconImage(TrayIcon tray)
     {
-        // 关闭已打开的菜单
-        if (_trayMenu is not null && _trayMenu.IsVisible)
+        try
         {
-            _trayMenu.Close();
-            _trayMenu = null;
-            return;
+            var uri = new Uri("avares://EndfieldCharge/Assets/tray_bolt.png");
+            using var stream = AssetLoader.Open(uri);
+            tray.Icon = new WindowIcon(new Bitmap(stream));
         }
-
-        // 单击托盘图标：立即播放电量预览（真实电池数据，完整三态动画），同时弹出菜单
-        _ = TriggerHudAsync();
-
-        _trayMenu = new TrayMenuWindow();
-        _trayMenu.PreviewClicked += () => { _trayMenu.Close(); _ = TriggerHudAsync(); };
-        _trayMenu.SettingsClicked += () => { _trayMenu.Close(); OpenSettingsWindow(); };
-        _trayMenu.CheckUpdateClicked += async () =>
+        catch
         {
-            _trayMenu.Close();
-            _trayMenu = null;
-            try
-            {
-                var (hasUpdate, version, url) = await UpdateChecker.CheckAsync();
-                if (hasUpdate && url is not null)
-                {
-                    var result = await MessageBox.Show(
-                        _hud ?? new HudWindow(),
-                        Localization.UpdateMsg(version ?? "?"),
-                        Localization.UpdateTitle,
-                        MessageBoxButton.OkCancel);
-
-                    if (result == MessageBoxResult.Ok)
-                        Platform.Start(url);
-                }
-                else
-                {
-                    await ShowAlertAsync(Localization.CheckUpdate, Localization.UpToDate);
-                }
-            }
-            catch
-            {
-                await ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
-            }
-        };
-        _trayMenu.ExitClicked += () => { _trayMenu.Close(); _desktop?.Shutdown(); };
-
-        // 刷新本地化文字
-        _trayMenu.MenuPreviewText.Text = Localization.PreviewHud;
-        _trayMenu.MenuSettingsText.Text = Localization.Settings;
-        _trayMenu.MenuCheckUpdateText.Text = Localization.CheckUpdate;
-        _trayMenu.MenuExitText.Text = Localization.Exit;
-
-        _trayMenu.ShowAtTray();
+            // 图标加载失败不致命：托盘仍可用，只是没有图标
+        }
     }
+
+    // ---------------- 托盘动作 ----------------
+
+    private void OnPreviewRequested() => _ = TriggerHudAsync();
+
+    private void OnSettingsRequested() => OpenSettingsWindow();
+
+    private void OnCheckUpdateRequested() => _ = CheckForUpdatesAsync();
+
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var (hasUpdate, version, url) = await UpdateChecker.CheckAsync();
+            if (hasUpdate && url is not null)
+            {
+                Platform.ActivateForDialog();
+
+                var result = await MessageBox.Show(
+                    _hud ?? new HudWindow(),
+                    Localization.UpdateMsg(version ?? "?"),
+                    Localization.UpdateTitle,
+                    MessageBoxButton.OkCancel);
+
+                if (result == MessageBoxResult.Ok)
+                    ShellOpen.Start(url);
+            }
+            else
+            {
+                await ShowAlertAsync(Localization.CheckUpdate, Localization.UpToDate);
+            }
+        }
+        catch
+        {
+            await ShowAlertAsync(Localization.CheckUpdate, Localization.UpdateCheckFailed);
+        }
+    }
+
+    private void ExitApp() => _desktop?.Shutdown();
 
     private void OpenSettingsWindow(string initialTab = "General")
     {
         // _hud 在 OnFrameworkInitializationCompleted 中先于托盘创建，此处必非空
         var win = new SettingsWindow(_settings, _hud!, initialTab);
+
+        // macOS Accessory 策略下必须显式激活，否则窗口会出现在所有应用后面
+        Platform.ActivateForDialog();
         win.Show();
+        win.Activate();
     }
 
     // ---------------- 收尾 ----------------
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
+        _hudTrigger?.Dispose();
+        _hudTrigger = null;
+
         _watcher?.Dispose();
         _watcher = null;
 

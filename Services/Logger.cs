@@ -4,13 +4,13 @@ using System.IO;
 namespace EndfieldCharge.Services;
 
 /// <summary>
-/// 简单文件日志。写入 %TEMP%/EndfieldCharge/log-{yyyyMMdd}.txt。
+/// 简单文件日志。Windows 写 <c>%TEMP%\EndfieldCharge\</c>，
+/// macOS 写 <c>~/Library/Logs/EndfieldCharge/</c>（见 <see cref="AppPaths.LogDirectory"/>）。
 /// 仅当 Enabled 为 true 时写入（由设置控制）。
 /// </summary>
 public static class Logger
 {
-    private static readonly string LogDir = Path.Combine(
-        Path.GetTempPath(), "EndfieldCharge");
+    private static readonly string LogDir = AppPaths.LogDirectory;
 
     public static bool Enabled { get; set; }
 

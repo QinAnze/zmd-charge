@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ============================================================
+       EndfieldCharge 单元测试。
+       只覆盖不含 UI、不含平台原生调用的纯逻辑（可跨平台运行）：
+         · HudDisplayCoordinator － HUD 事件合并（时间相关，必须锁死）
+       平台相关代码（IOKit / AppKit / Win32）通过 selftest 模式与真机手工清单验证，
+       不在此处做单测。
+
+       因此本项目不引用 Avalonia；通过 Compile Include 直接链接被测源文件，
+       使被测工程保持单文件、可链接。
+       ============================================================ -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>EndfieldCharge.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 被测源码（链接，避免复制） -->
+    <Compile Include="../../Platform/HudDisplayCoordinator.cs" Link="Subject/HudDisplayCoordinator.cs" />
+    <Compile Include="../../Platform/NotchBirthGeometry.cs" Link="Subject/NotchBirthGeometry.cs" />
+    <!-- Logger 是被测类的默认日志出口；测试传 log:null 时走这里。
+         链接真实文件而非打桩，保证"默认行为"与生产一致。 -->
+    <Compile Include="../../Services/Logger.cs" Link="Subject/Logger.cs" />
+    <Compile Include="../../Platform/AppPaths.cs" Link="Subject/AppPaths.cs" />
+  </ItemGroup>
+
+</Project>

@@ -4,36 +4,12 @@ using System.Runtime.Versioning;
 
 namespace EndfieldCharge.Services;
 
-/// <summary>一次电池采样结果。</summary>
-public sealed record BatterySnapshot(
-    double RemainingWh,
-    double FullWh,
-    int Percent,
-    bool AcOnline,
-    bool Charging)
-{
-    /// <summary>充/放电功率（瓦）。正=充电，负=放电；未知为 null。</summary>
-    public double? RateWatts { get; init; }
-
-    /// <summary>设计容量（mWh），用于计算健康度。</summary>
-    public double? DesignCapacityWh { get; init; }
-
-    /// <summary>电池健康度百分比（当前满充容量 / 设计容量）。</summary>
-    public double? HealthPercent => DesignCapacityWh.HasValue && DesignCapacityWh.Value > 0
-        ? Math.Round(FullWh / DesignCapacityWh.Value * 100, 1)
-        : null;
-
-    /// <summary>剩余时间估计；未知为 null。</summary>
-    public TimeSpan? EstimatedRemaining { get; init; }
-
-    public bool HasBattery => FullWh > 0;
-}
-
 /// <summary>
-/// 电池信息读取。主路径走 powrprof（快、准、同步），失败时退回 WMI Win32_Battery。
+/// Windows 电池信息读取。主路径走 powrprof（快、准、同步），失败时退回 WMI Win32_Battery。
+/// 共享模型 <see cref="BatterySnapshot"/> 定义于 Platform/BatterySnapshot.cs。
 /// </summary>
 [SupportedOSPlatform("windows")]
-public static class BatteryService
+internal static class WindowsBatteryReader
 {
     /// <summary>取当前电池快照；无电池或读取失败返回 null。</summary>
     public static BatterySnapshot? GetSnapshot()
@@ -47,7 +23,7 @@ public static class BatteryService
     private static bool TryFromPowerProf(out BatterySnapshot? snapshot)
     {
         snapshot = null;
-        if (!PowerNative.TryGetBatteryState(out var s))
+        if (!WindowsPowerNative.TryGetBatteryState(out var s))
             return false;
 
         // 有的固件 MaxCapacity 给的是"设计容量"而非"当前满充容量"，这里只做合理性校验

@@ -8,16 +8,18 @@ using System.Threading.Tasks;
 namespace EndfieldCharge.Services;
 
 /// <summary>
-/// 电源来源（交流 / 电池）变化监听。
+/// Windows 电源来源（交流 / 电池）变化 + 省电/节能模式监听。
 ///
 /// 主路径：RegisterPowerSettingNotification 订阅 GUID_ACDC_POWER_SOURCE，
 ///         由一个后台线程上的 message-only 隐藏窗口接收 WM_POWERBROADCAST。
 /// 兜底  ：低频轮询（部分机型/电源管理驱动不派发通知），开销可忽略。
 ///
 /// 注意：事件在后台线程上触发，订阅方需自行切回 UI 线程。
+/// 线程模型：单一消息循环线程串行处理所有状态变更，因此本类无需额外加锁；
+///           macOS 实现因 runloop + timer 两个线程需显式加锁（见 MacOSPowerMonitor）。
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class PowerWatcher : IDisposable
+internal sealed class WindowsPowerMonitor : IPowerMonitor
 {
     private const string ClassName = "EndfieldCharge_PowerMsgWindow";
     private const uint WmDestroy = 0x0002;
@@ -41,7 +43,7 @@ public sealed class PowerWatcher : IDisposable
     /// </summary>
     private static readonly TimeSpan ChangeConfirmDelay = TimeSpan.FromMilliseconds(400);
 
-    private readonly PowerNative.WndProcDelegate _wndProc;
+    private readonly WindowsPowerNative.WndProcDelegate _wndProc;
     private Thread? _thread;
     private uint _threadId;
     private IntPtr _hwnd;
@@ -55,7 +57,7 @@ public sealed class PowerWatcher : IDisposable
     private volatile bool _stopping;
     private bool _disposed;
 
-    public PowerWatcher()
+    public WindowsPowerMonitor()
     {
         // 保持委托存活，防止被 GC 回收后 WndProc 崩溃
         _wndProc = WndProc;
@@ -69,6 +71,12 @@ public sealed class PowerWatcher : IDisposable
 
     /// <summary>已启动并持有初始状态。</summary>
     public bool IsRunning => _thread is { IsAlive: true };
+
+    /// <summary>当前电池快照（powrprof 主路径 + WMI 兜底）；无电池返回 null。</summary>
+    public BatterySnapshot? GetSnapshot() => WindowsBatteryReader.GetSnapshot();
+
+    /// <summary>只取 AC 是否在线（不依赖电池存在）。</summary>
+    public bool TryGetAcOnline(out bool acOnline) => WindowsPowerNative.TryGetAcOnline(out acOnline);
 
     public void Start()
     {
@@ -90,7 +98,7 @@ public sealed class PowerWatcher : IDisposable
         _stopping = true;
 
         if (_threadId != 0)
-            PowerNative.PostThreadMessageW(_threadId, PowerNative.WmQuit, IntPtr.Zero, IntPtr.Zero);
+            WindowsPowerNative.PostThreadMessageW(_threadId, WindowsPowerNative.WmQuit, IntPtr.Zero, IntPtr.Zero);
 
         // 消息循环退出时会自行清理窗口与通知句柄
         _thread?.Join(TimeSpan.FromSeconds(3));
@@ -100,38 +108,38 @@ public sealed class PowerWatcher : IDisposable
 
     private void MessageLoop()
     {
-        _threadId = PowerNative.GetCurrentThreadId();
+        _threadId = WindowsPowerNative.GetCurrentThreadId();
 
         // ---- 注册窗口类 ----
-        var wcex = new PowerNative.WndClassEx
+        var wcex = new WindowsPowerNative.WndClassEx
         {
-            CbSize = (uint)Marshal.SizeOf<PowerNative.WndClassEx>(),
+            CbSize = (uint)Marshal.SizeOf<WindowsPowerNative.WndClassEx>(),
             LpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-            HInstance = PowerNative.GetModuleHandleW(null),
+            HInstance = WindowsPowerNative.GetModuleHandleW(null),
             LpszClassName = ClassName,
         };
-        PowerNative.RegisterClassExW(ref wcex);
+        WindowsPowerNative.RegisterClassExW(ref wcex);
 
         // ---- message-only 窗口：不可见、不进任务栏、只收消息 ----
-        _hwnd = PowerNative.CreateWindowExW(
+        _hwnd = WindowsPowerNative.CreateWindowExW(
             0, ClassName, null, 0,
             0, 0, 0, 0,
-            PowerNative.HwndMessage,
+            WindowsPowerNative.HwndMessage,
             IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
         if (_hwnd != IntPtr.Zero)
         {
-            var guid = PowerNative.GuidAcdcPowerSource;
-            _acdcNotify = PowerNative.RegisterPowerSettingNotification(
-                _hwnd, ref guid, PowerNative.DeviceNotifyWindowHandle);
+            var guid = WindowsPowerNative.GuidAcdcPowerSource;
+            _acdcNotify = WindowsPowerNative.RegisterPowerSettingNotification(
+                _hwnd, ref guid, WindowsPowerNative.DeviceNotifyWindowHandle);
 
-            var saverGuid = PowerNative.GuidPowerSavingStatus;
-            _saverNotify = PowerNative.RegisterPowerSettingNotification(
-                _hwnd, ref saverGuid, PowerNative.DeviceNotifyWindowHandle);
+            var saverGuid = WindowsPowerNative.GuidPowerSavingStatus;
+            _saverNotify = WindowsPowerNative.RegisterPowerSettingNotification(
+                _hwnd, ref saverGuid, WindowsPowerNative.DeviceNotifyWindowHandle);
 
-            var esGuid = PowerNative.GuidEnergySaverStatus;
-            _energySaverNotify = PowerNative.RegisterPowerSettingNotification(
-                _hwnd, ref esGuid, PowerNative.DeviceNotifyWindowHandle);
+            var esGuid = WindowsPowerNative.GuidEnergySaverStatus;
+            _energySaverNotify = WindowsPowerNative.RegisterPowerSettingNotification(
+                _hwnd, ref esGuid, WindowsPowerNative.DeviceNotifyWindowHandle);
 
             Logger.Info($"PowerWatcher: hwnd=0x{_hwnd.ToInt64():X}, acdcNotify=0x{_acdcNotify.ToInt64():X}, saverNotify=0x{_saverNotify.ToInt64():X}, esNotify=0x{_energySaverNotify.ToInt64():X}");
         }
@@ -144,12 +152,12 @@ public sealed class PowerWatcher : IDisposable
         // 必须注册通知之后才能开始收事件，否则会在"还不知道当前状态"时
         // 就被某个事件拽到错误的初值上、然后下一次轮询又把它"修正"成真实值，
         // 看起来就像发生了一次状态变化 → 误触 HUD。
-        if (PowerNative.TryGetAcOnline(out bool ac))
+        if (WindowsPowerNative.TryGetAcOnline(out bool ac))
         {
             _lastAcOnline = ac;
             _initialized = true;
         }
-        if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+        if (WindowsPowerNative.TryGetPowerSavingStatus(out bool saver))
         {
             _lastSaverEnabled = saver;
             Logger.Info($"PowerWatcher: initial saver={saver}");
@@ -159,31 +167,31 @@ public sealed class PowerWatcher : IDisposable
         using var pollTimer = new Timer(_ => PollOnce(), null, PollInterval, PollInterval);
 
         // ---- 消息循环 ----
-        while (PowerNative.GetMessageW(out var msg, IntPtr.Zero, 0, 0))
+        while (WindowsPowerNative.GetMessageW(out var msg, IntPtr.Zero, 0, 0))
         {
-            PowerNative.TranslateMessage(ref msg);
-            PowerNative.DispatchMessageW(ref msg);
+            WindowsPowerNative.TranslateMessage(ref msg);
+            WindowsPowerNative.DispatchMessageW(ref msg);
         }
 
         // ---- 线程内清理（窗口/通知必须在此线程销毁）----
         if (_acdcNotify != IntPtr.Zero)
         {
-            PowerNative.UnregisterPowerSettingNotification(_acdcNotify);
+            WindowsPowerNative.UnregisterPowerSettingNotification(_acdcNotify);
             _acdcNotify = IntPtr.Zero;
         }
         if (_saverNotify != IntPtr.Zero)
         {
-            PowerNative.UnregisterPowerSettingNotification(_saverNotify);
+            WindowsPowerNative.UnregisterPowerSettingNotification(_saverNotify);
             _saverNotify = IntPtr.Zero;
         }
         if (_energySaverNotify != IntPtr.Zero)
         {
-            PowerNative.UnregisterPowerSettingNotification(_energySaverNotify);
+            WindowsPowerNative.UnregisterPowerSettingNotification(_energySaverNotify);
             _energySaverNotify = IntPtr.Zero;
         }
         if (_hwnd != IntPtr.Zero)
         {
-            PowerNative.DestroyWindow(_hwnd);
+            WindowsPowerNative.DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
         }
     }
@@ -191,12 +199,12 @@ public sealed class PowerWatcher : IDisposable
     private void PollOnce()
     {
         if (_stopping) return;
-        if (!PowerNative.TryGetAcOnline(out bool ac)) return;
+        if (!WindowsPowerNative.TryGetAcOnline(out bool ac)) return;
         TraceEvent($"PollOnce ac={ac}");
         RaiseIfChanged(ac);
 
         // 省电模式轮询兜底（部分机型不派发 GUID_POWER_SAVING_STATUS 通知）
-        if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+        if (WindowsPowerNative.TryGetPowerSavingStatus(out bool saver))
         {
             TraceEvent($"PollOnce saver={saver}");
             RaiseSaverIfChanged(saver);
@@ -241,7 +249,7 @@ public sealed class PowerWatcher : IDisposable
         if (_stopping || seq != _confirmSeq)
             return;
 
-        if (!PowerNative.TryGetAcOnline(out bool current))
+        if (!WindowsPowerNative.TryGetAcOnline(out bool current))
             return;
 
         if (current != candidate)
@@ -296,25 +304,25 @@ public sealed class PowerWatcher : IDisposable
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == PowerNative.WmPowerBroadcast)
+        if (msg == WindowsPowerNative.WmPowerBroadcast)
         {
             int w = wParam.ToInt32();
 
-            if (w == PowerNative.PbtPowerSettingChange && lParam != IntPtr.Zero)
+            if (w == WindowsPowerNative.PbtPowerSettingChange && lParam != IntPtr.Zero)
             {
                 try
                 {
-                    var setting = Marshal.PtrToStructure<PowerNative.PowerBroadcastSetting>(lParam);
-                    if (setting.PowerSetting == PowerNative.GuidAcdcPowerSource)
+                    var setting = Marshal.PtrToStructure<WindowsPowerNative.PowerBroadcastSetting>(lParam);
+                    if (setting.PowerSetting == WindowsPowerNative.GuidAcdcPowerSource)
                     {
-                        RaiseIfChanged(setting.Data == PowerNative.AcPowerSource);
+                        RaiseIfChanged(setting.Data == WindowsPowerNative.AcPowerSource);
                     }
-                    else if (setting.PowerSetting == PowerNative.GuidPowerSavingStatus
+                    else if (setting.PowerSetting == WindowsPowerNative.GuidPowerSavingStatus
                              && !UseEnergySaverGuid)
                     {
                         RaiseSaverIfChanged(setting.Data == 1);
                     }
-                    else if (setting.PowerSetting == PowerNative.GuidEnergySaverStatus
+                    else if (setting.PowerSetting == WindowsPowerNative.GuidEnergySaverStatus
                              && UseEnergySaverGuid)
                     {
                         // 24H2+ 节能模式：0=关, 1=标准, 2=高节能（非 0 即开启）
@@ -326,12 +334,12 @@ public sealed class PowerWatcher : IDisposable
                     // 结构解析失败则忽略，轮询兜底会补上
                 }
             }
-            else if (w == PowerNative.PbtApmPowerStatusChange)
+            else if (w == WindowsPowerNative.PbtApmPowerStatusChange)
             {
                 // 通用电源状态变化：重新读一次真实状态
-                if (PowerNative.TryGetAcOnline(out bool ac))
+                if (WindowsPowerNative.TryGetAcOnline(out bool ac))
                     RaiseIfChanged(ac);
-                if (PowerNative.TryGetPowerSavingStatus(out bool saver))
+                if (WindowsPowerNative.TryGetPowerSavingStatus(out bool saver))
                     RaiseSaverIfChanged(saver);
             }
         }
@@ -340,7 +348,7 @@ public sealed class PowerWatcher : IDisposable
             return IntPtr.Zero;
         }
 
-        return PowerNative.DefWindowProcW(hWnd, msg, wParam, lParam);
+        return WindowsPowerNative.DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
     public void Dispose()

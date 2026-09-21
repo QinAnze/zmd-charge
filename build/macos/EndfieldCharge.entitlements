@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened Runtime 下运行 .NET 应用所需的最小权限集。
+  若缺少 allow-jit，签名后应用会在启动瞬间被内核以 "Code Signature Invalid / JIT 被拒" 终止。
+
+  本项目不使用 App Sandbox：读 IOKit 电池信息与写 ~/Library/LaunchAgents
+  在沙盒内需要额外 entitlement，而这是工具类软件、由用户自行选择分发渠道。
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>

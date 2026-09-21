@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build
 
 on:
   push:
@@ -13,7 +13,34 @@ permissions:
   contents: write   # 打标签时创建 Release 需要
 
 jobs:
+  # ============================================================
+  #  纯逻辑单元测试（跨平台，不依赖 Avalonia / 平台原生 API）
+  #  覆盖 HudDisplayCoordinator 的事件合并时序：
+  #  macOS 插拔电源时会紧接着自动切低电量模式，两条事件连弹 HUD、
+  #  第二次把第一次动画掐断 —— 这里把该行为锁死。
+  # ============================================================
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Run tests
+      run: dotnet test tests/EndfieldCharge.Tests/EndfieldCharge.Tests.csproj --nologo
+
+  # ============================================================
+  #  Windows：Inno Setup 安装包 + 便携 zip（保持既有链路不变）
+  # ============================================================
   build:
+    name: Windows
+    needs: test
     runs-on: windows-latest
 
     steps:
@@ -106,3 +133,74 @@ jobs:
         files: |
           installer\Output\*.exe
           EndfieldCharge-*-portable.zip
+
+  # ============================================================
+  #  macOS：.app bundle + dmg（菜单栏常驻应用）
+  #  说明：macos-latest 为 Apple Silicon runner，与目标机型一致。
+  #        package-macos.sh 内部含 --selftest 冒烟门禁：IOKit / CoreFoundation /
+  #        AppKit 互操作在干净环境不可用时，打包阶段就会失败。
+  #  needs: [test, build] —— test 保证逻辑正确；build 保证 Release 由 Windows job 先创建，macOS job 再追加文件，
+  #                  避免两个 job 并发创建同一个 Release 造成竞争。
+  # ============================================================
+  build-macos:
+    name: macOS
+    needs: [test, build]
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    # ---- 版本号：与 Windows job 完全相同的规则，保证两平台版本可比较 ----
+    - name: Resolve version
+      id: ver
+      run: |
+        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          v="${GITHUB_REF#refs/tags/v}"
+        else
+          v="0.0.${GITHUB_RUN_NUMBER}"
+        fi
+        echo "version=$v" >> "$GITHUB_OUTPUT"
+        echo "Version: $v"
+
+    - name: Restore
+      run: dotnet restore
+
+    # package-macos.sh 内含 publish + 组装 bundle + Info.plist + 签名 + dmg + selftest 冒烟
+    - name: Package .app and dmg
+      env:
+        VERSION: ${{ steps.ver.outputs.version }}
+        SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+      run: ./scripts/package-macos.sh
+
+    - name: Show package contents
+      run: |
+        ls -la build/macos/dist
+        file build/macos/dist/EndfieldCharge.app/Contents/MacOS/EndfieldCharge
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: EndfieldCharge-${{ steps.ver.outputs.version }}-macos
+        path: |
+          build/macos/dist/EndfieldCharge.app
+          build/macos/dist/*.dmg
+        if-no-files-found: error
+
+    # 只有推送 v* 标签才发 Release；此时 Windows job 已创建好 Release，这里追加 macOS 产物
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      env:
+        VERSION: ${{ steps.ver.outputs.version }}
+      uses: softprops/action-gh-release@v2
+      with:
+        name: EndfieldCharge ${{ steps.ver.outputs.version }}
+        generate_release_notes: true
+        files: |
+          build/macos/dist/*.dmg

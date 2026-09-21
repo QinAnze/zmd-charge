@@ -11,7 +11,7 @@
         WindowStartupLocation="CenterScreen"
         Background="#1A1A1C"
         Foreground="#E8E8E8"
-        FontFamily="HarmonyOS Sans SC, HarmonyOS Sans, Inter, Microsoft YaHei UI, sans-serif">
+        FontFamily="HarmonyOS Sans SC, HarmonyOS Sans, Inter, PingFang SC, Microsoft YaHei UI, Hiragino Sans GB, sans-serif">
 
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- 标题栏 -->

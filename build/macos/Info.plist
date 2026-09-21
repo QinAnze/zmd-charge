@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  EndfieldCharge macOS 应用包清单模板。
+  @@VERSION@@ 由 scripts/package-macos.sh 替换为真实版本号。
+
+  关键键说明见 docs/macos-distribution.md：
+    LSUIElement = true  → 不占 Dock、不进 Cmd-Tab（菜单栏常驻应用的关键键）
+    NSHighResolutionCapable → Retina 渲染
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+
+  <key>CFBundleExecutable</key>
+  <string>EndfieldCharge</string>
+
+  <key>CFBundleIdentifier</key>
+  <string>com.lenkmat.endfieldcharge</string>
+
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+
+  <key>CFBundleName</key>
+  <string>EndfieldCharge</string>
+
+  <key>CFBundleDisplayName</key>
+  <string>EndfieldCharge</string>
+
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+
+  <key>CFBundleShortVersionString</key>
+  <string>@@VERSION@@</string>
+
+  <key>CFBundleVersion</key>
+  <string>@@VERSION@@</string>
+
+  <!-- 暂不提供 CFBundleIconFile：应用为 LSUIElement 菜单栏常驻，Finder 里
+       显示默认图标即可；如需自定义，把 Assets/tray_bolt.ico 转成
+       EndfieldCharge.icns 放进 Contents/Resources 并在此声明即可。 -->
+
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.utilities</string>
+
+  <!-- 菜单栏常驻：不显示 Dock 图标，也不出现在 Cmd-Tab 切换器中 -->
+  <key>LSUIElement</key>
+  <true/>
+
+  <key>NSHighResolutionCapable</key>
+  <true/>
+
+  <!-- 中文本地化优先（界面文案由 App 内部 Localization 运行时切换） -->
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>zh-Hans</string>
+  </array>
+
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © 2026 Lenkmat</string>
+</dict>
+</plist>

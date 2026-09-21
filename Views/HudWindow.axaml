@@ -9,6 +9,8 @@
 
         SystemDecorations="None"
         Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        TransparencyBackgroundFallback="Transparent"
 
         Topmost="True"
         ShowInTaskbar="False"
@@ -16,6 +18,16 @@
         CanResize="False"
         Focusable="False"
         WindowStartupLocation="Manual">
+
+  <!-- ⚠️ TransparencyLevelHint 是 macOS 上"无黑底"的必要条件，勿删。
+       Avalonia 的 macOS 后端按该属性决定 NSWindow 背景色：
+         None（默认值） → [NSColor windowBackgroundColor] —— 整个窗口一块系统深色不透明底
+         Transparent    → [NSColor clearColor]            —— 胶囊之外露出桌面
+       仅设 Background="Transparent" 不够：那只影响 Avalonia 绘制层，
+       窗口自身的 opaque 背景仍在。TransparencyBackgroundFallback 一并设为
+       Transparent，避免平台不支持透明时又回退成不透明底。
+       源码依据：native/Avalonia.Native/src/OSX/WindowBaseImpl.mm 的 SetTransparencyMode
+                src/Avalonia.Native/TopLevelImpl.cs 的 SetTransparencyLevelHint -->
 
   <Window.Resources>
     <ResourceDictionary>
@@ -30,13 +42,24 @@
        只有 CornerRadius 在全圆(30) ↔ 圆角矩形(12) 之间过渡。
        ScaleHost 收尾整体缩放。 -->
   <Grid x:Name="Root" Width="1200" Height="100" VerticalAlignment="Center">
-    <!-- 全局缩放 0.8：整个 HUD 缩小 20% -->
-    <Grid x:Name="GlobalScale"
-          HorizontalAlignment="Center" VerticalAlignment="Center"
-          RenderTransformOrigin="50%,50%">
+    <!-- BirthHost：macOS 刘海"出生与分离"前导动画的独立位移承载。
+         只做整段下移（TranslateTransform），不参与任何缩放 ——
+         缩放由内层 GlobalScale（全局缩放）+ ScaleHost（收尾缩小）+ Pill（弹出/拉伸）各自负责，
+         互不干扰。Windows 上该轨道不播放，RenderTransform 恒为 (0,0)。
+         说明见 Animations/HudAnimations.cs 的 BirthLead 与 Platform/NotchBirthGeometry.cs -->
+    <Grid x:Name="BirthHost"
+          HorizontalAlignment="Center" VerticalAlignment="Center">
       <Grid.RenderTransform>
-        <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
+        <TranslateTransform X="0" Y="0"/>
       </Grid.RenderTransform>
+
+      <!-- 全局缩放 0.8：整个 HUD 缩小 20% -->
+      <Grid x:Name="GlobalScale"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            RenderTransformOrigin="50%,50%">
+        <Grid.RenderTransform>
+          <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
+        </Grid.RenderTransform>
 
     <Grid x:Name="ScaleHost"
           HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -56,6 +79,10 @@
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
               Opacity="0">
+        <!-- 注意：不要在这里固定 RenderTransformOrigin。
+             它被 PillAppear 的 scale 0.6→1 使用，改动会同时影响 Windows 的弹出观感。
+             统一保持 Avalonia 默认的 (50%,50%)；macOS 出生动画若需要"顶边钉住"，
+             由 HudWindow 在播放前后临时设置/还原（见 SetPillOriginForBirth）。 -->
         <Border.RenderTransform>
           <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
         </Border.RenderTransform>
@@ -263,6 +290,7 @@
 
     </Grid>
 	    </Grid>
+	  </Grid>
 
 	    <!-- FPS 调试计数器（仅 show-fps 参数时可见） -->
 		    <TextBlock x:Name="FpsText"

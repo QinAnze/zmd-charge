@@ -19,6 +19,11 @@ public partial class SettingsWindow : Window
 {
     private readonly HudWindow _hud;
 
+    // 当前选中的全局快捷键（未保存也生效于预览）
+    private uint _hotkeyModifiers;
+    private uint _hotkeyKey;
+    private bool _recordingHotkey;
+
     public SettingsWindow(AppSettings settings, HudWindow hud, string initialTab = "General")
     {
         InitializeComponent();
@@ -92,6 +97,12 @@ public partial class SettingsWindow : Window
         PreviewPlayBtn.Click += OnPlayPreview;
         FontInstallBtn.Click += OnInstallFont;
 
+        // 全局快捷键：点击方框后录制新组合键。
+        // KeyDown 挂在窗口上（隧道阶段）而不是方框上 —— 无论当前焦点在哪个控件，
+        // 录制期间按键都能被截获，不依赖 Border 能否拿到键盘焦点。
+        HotkeyBox.PointerPressed += (_, _) => BeginRecordHotkey();
+        AddHandler(KeyDownEvent, OnHotkeyKeyDown, RoutingStrategies.Tunnel);
+        HotkeySwitch.IsCheckedChanged += (_, _) => OnHotkeyToggleChanged();
         // 默认 Tab
         var (tab, panel) = initialTab switch
         {
@@ -160,6 +171,10 @@ public partial class SettingsWindow : Window
         FontSectionTitle.Text = Localization.FontSectionTitle;
         FontDescText.Text = Localization.FontDesc;
         FontInstallBtn.Content = Localization.BtnInstallFont;
+        SectionHotkeyText.Text = Localization.SectionHotkey;
+        LabelHotkeyEnable.Text = Localization.LabelHotkeyEnable;
+        DescHotkeyText.Text = Localization.DescHotkey;
+        LabelHotkeyKeys.Text = Localization.LabelHotkeyKeys;
 
         SectionDisplayText.Text = Localization.SectionDisplay;
         SectionPositionText.Text = Localization.SectionPosition;
@@ -250,6 +265,13 @@ public partial class SettingsWindow : Window
         FullChargeSwitch.IsChecked = s.EnableFullChargeAlert;
         AutoStartSwitch.IsChecked = s.EnableAutoStart;
 
+        _hotkeyModifiers = s.HotkeyModifiers;
+        _hotkeyKey = (uint)s.HotkeyKey;
+        HotkeySwitch.IsChecked = s.EnableHotkey;
+        HotkeyBox.IsEnabled = s.EnableHotkey;
+        HotkeyBox.Opacity = s.EnableHotkey ? 1d : 0.45d;
+        RefreshHotkeyUi();
+
         VersionText.Text = GetType().Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
         FontStatusText.Text = string.Empty;
@@ -277,6 +299,9 @@ public partial class SettingsWindow : Window
         EnableFullChargeAlert = FullChargeSwitch.IsChecked == true,
         EnablePowerSaverNotify = PowerSaverSwitch.IsChecked == true,
         EnableAutoStart = AutoStartSwitch.IsChecked == true,
+        EnableHotkey = HotkeySwitch.IsChecked == true,
+        HotkeyModifiers = _hotkeyModifiers,
+        HotkeyKey = (int)_hotkeyKey,
     };
 
     // ---------------- Tab 切换 ----------------
@@ -312,23 +337,28 @@ public partial class SettingsWindow : Window
             RippleSpread = Math.Clamp(RippleSpreadSlider.Value, 0.5d, 1.5d),
         };
 
-        var sample = new BatterySnapshot(
+        var pluggedIn = new BatterySnapshot(
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: true, Charging: true);
+
+        var unplugged = new BatterySnapshot(
+            RemainingWh: 62.4, FullWh: 90.0,
+            Percent: 69, AcOnline: false, Charging: false);
 
         try
         {
             switch (PreviewModeCombo.SelectedIndex)
             {
                 case 1:
-                    await _hud.ShowAndPlayAsync(sample, acOnline: true,
+                    await _hud.ShowAndPlayAsync(pluggedIn, acOnline: true,
                         HudPlayMode.PowerSaver, options);
                     break;
                 case 2:
-                    await _hud.ShowSimpleAsync(sample, options);
+                    await _hud.ShowAndPlayAsync(unplugged, acOnline: false,
+                        HudPlayMode.Battery, options);
                     break;
                 default:
-                    await _hud.ShowAndPlayAsync(sample, acOnline: true,
+                    await _hud.ShowAndPlayAsync(pluggedIn, acOnline: true,
                         HudPlayMode.Charge, options);
                     break;
             }
@@ -355,9 +385,12 @@ public partial class SettingsWindow : Window
         else
             Services.AutoStart.Disable();
 
+        // 应用设置（同时把全局快捷键重新注册一遍），并把注册结果反馈到界面
+        bool hotkeyOk = true;
         if (Application.Current is App app)
-            app.OnSettingsChanged(settings);
+            hotkeyOk = app.OnSettingsChanged(settings);
 
+        UpdateHotkeyHint(hotkeyOk);
         SavedHint.Text = Localization.SavedToast;
         SavedHint.Opacity = 1;
         Dispatcher.UIThread.Post(async () =>
@@ -427,6 +460,128 @@ public partial class SettingsWindow : Window
         {
             FontInstallBtn.IsEnabled = true;
         }
+    }
+
+    // ---------------- 全局快捷键 ----------------
+
+    /// <summary>进入录制状态：接下来按下的组合键成为新的全局快捷键。</summary>
+    private void BeginRecordHotkey()
+    {
+        if (HotkeySwitch.IsChecked != true)
+            return;
+
+        _recordingHotkey = true;
+        HotkeyText.Text = Localization.HotkeyRecording;
+        HotkeyHintText.Foreground = new SolidColorBrush(Color.Parse("#888888"));
+        HotkeyHintText.Text = Localization.HotkeyIdleHint;
+        HotkeyBox.BorderBrush = new SolidColorBrush(Color.Parse("#C6CA4C"));
+        HotkeyBox.Focus();
+    }
+
+    private void OnHotkeyKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!_recordingHotkey)
+            return;
+
+        // 录制期间吞掉所有按键，避免 Tab / 方向键把焦点移走
+        e.Handled = true;
+
+        var key = e.Key;
+
+        // Esc / Backspace / Delete 视为取消，保留原快捷键
+        if (key is Key.Escape or Key.Back or Key.Delete)
+        {
+            CancelRecordHotkey();
+            return;
+        }
+
+        // 只按了修饰键，继续等主键
+        if (IsModifierKey(key))
+            return;
+
+        uint vk = HotkeyService.VirtualKeyFromKey(key);
+        if (vk == 0)
+        {
+            ShowHotkeyHint(Localization.HotkeyUnsupported, isError: true);
+            return;
+        }
+
+        uint modifiers = ModifiersFrom(e.KeyModifiers);
+
+        // 不带修饰键的普通按键会全局抢占输入，只放行 F1–F24
+        if (modifiers == 0 && !HotkeyService.IsFunctionKey(key))
+        {
+            ShowHotkeyHint(Localization.HotkeyNeedModifier, isError: true);
+            return;
+        }
+
+        _recordingHotkey = false;
+        _hotkeyModifiers = modifiers;
+        _hotkeyKey = vk;
+        HotkeyBox.BorderBrush = new SolidColorBrush(Color.Parse("#3A3A3C"));
+        RefreshHotkeyUi();
+    }
+
+    private void CancelRecordHotkey()
+    {
+        _recordingHotkey = false;
+        HotkeyBox.BorderBrush = new SolidColorBrush(Color.Parse("#3A3A3C"));
+        RefreshHotkeyUi();
+    }
+
+    private void OnHotkeyToggleChanged()
+    {
+        bool on = HotkeySwitch.IsChecked == true;
+
+        if (!on)
+            _recordingHotkey = false;
+
+        HotkeyBox.IsEnabled = on;
+        HotkeyBox.Opacity = on ? 1d : 0.45d;
+        RefreshHotkeyUi();
+    }
+
+    /// <summary>把当前组合键写回方框，并复位提示文案。</summary>
+    private void RefreshHotkeyUi()
+    {
+        HotkeyText.Text = HotkeyService.ToDisplayString(_hotkeyModifiers, _hotkeyKey);
+        ShowHotkeyHint(
+            HotkeySwitch.IsChecked == true ? Localization.HotkeyIdleHint : Localization.HotkeyDisabled,
+            isError: false);
+    }
+
+    /// <summary>保存后把注册结果反馈给用户（被占用时提示冲突）。</summary>
+    private void UpdateHotkeyHint(bool registered)
+    {
+        if (HotkeySwitch.IsChecked != true)
+        {
+            ShowHotkeyHint(Localization.HotkeyDisabled, isError: false);
+            return;
+        }
+
+        ShowHotkeyHint(
+            registered ? Localization.HotkeyIdleHint : Localization.HotkeyConflict,
+            isError: !registered);
+    }
+
+    private void ShowHotkeyHint(string text, bool isError)
+    {
+        HotkeyHintText.Text = text;
+        HotkeyHintText.Foreground = new SolidColorBrush(Color.Parse(isError ? "#FF4D4F" : "#888888"));
+    }
+
+    private static bool IsModifierKey(Key key) => key is
+        Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or
+        Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin;
+
+    private static uint ModifiersFrom(KeyModifiers km)
+    {
+        uint m = 0;
+        if (km.HasFlag(KeyModifiers.Control)) m |= PowerNative.ModControl;
+        if (km.HasFlag(KeyModifiers.Alt)) m |= PowerNative.ModAlt;
+        if (km.HasFlag(KeyModifiers.Shift)) m |= PowerNative.ModShift;
+        if (km.HasFlag(KeyModifiers.Meta)) m |= PowerNative.ModWin;
+        return m;
     }
 }
 

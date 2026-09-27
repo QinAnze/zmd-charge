@@ -22,6 +22,7 @@ public partial class App : Application
     private AppSettings _settings = new();
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private bool _lastLowBatteryNotified;
+    private HotkeyService? _hotkeys;
 
     public override void Initialize()
     {
@@ -60,20 +61,26 @@ public partial class App : Application
         SetupTrayIcon();
         StartPowerWatching();
 
+        StartHotkeys();
         // 调试命令行参数
         if (HasCommandLineArg("--demo"))
             _ = PreviewWithSampleDataAsync();
         else if (HasCommandLineArg("--preview-unplug"))
+            _ = PreviewBatteryAsync();
+        else if (HasCommandLineArg("--preview-simple"))
             _ = PreviewSimpleAsync();
         else if (HasCommandLineArg("--preview"))
             _ = TriggerHudAsync();
+        else if (HasCommandLineArg("--settings"))
+            OpenSettingsWindow();
 
         base.OnFrameworkInitializationCompleted();
     }
 
     // ---------------- 设置 ----------------
 
-    public void OnSettingsChanged(AppSettings settings)
+    /// <summary>应用新设置。返回全局快捷键是否注册成功（失败通常是组合键被其它程序占用）。</summary>
+    public bool OnSettingsChanged(AppSettings settings)
     {
         _settings = settings;
         Localization.UseSettings(settings);
@@ -82,6 +89,9 @@ public partial class App : Application
         // 更新托盘提示
         if (_tray is not null)
             _tray.ToolTipText = Localization.TrayTooltip;
+
+        // 快捷键可能被改过（开关 / 组合键），重新注册
+        return ApplyHotkey(settings);
     }
 
     // ---------------- 命令行参数 ----------------
@@ -110,6 +120,18 @@ public partial class App : Application
         await _hud.ShowAndPlayAsync(sample, acOnline: true);
     }
 
+    /// <summary>--preview-unplug：未插电（电池模式）三态动画，样本数据。</summary>
+    private async Task PreviewBatteryAsync()
+    {
+        if (_hud is null) return;
+
+        var sample = new BatterySnapshot(
+            RemainingWh: 62.4, FullWh: 90.0,
+            Percent: 69, AcOnline: false, Charging: false);
+
+        await _hud.ShowAndPlayAsync(sample, acOnline: false, HudPlayMode.Battery);
+    }
+
     private async Task PreviewSimpleAsync()
     {
         if (_hud is null) return;
@@ -134,7 +156,7 @@ public partial class App : Application
                 if (acOnline)
                     _ = TriggerHudAsync();
                 else
-                    _ = TriggerSimpleHudAsync();
+                    _ = TriggerBatteryHudAsync();
             });
         };
 
@@ -154,6 +176,30 @@ public partial class App : Application
         };
 
         _watcher.Start();
+    }
+
+    // ---------------- 全局快捷键 ----------------
+
+    private void StartHotkeys()
+    {
+        _hotkeys = new HotkeyService();
+        _hotkeys.Pressed += (_, _) =>
+        {
+            Logger.Info("HotkeyService: hotkey pressed -> show HUD");
+            Dispatcher.UIThread.Post(() => _ = TriggerHudAsync(checkAlerts: false, replayIntro: false));
+        };
+        _hotkeys.Start();
+        ApplyHotkey(_settings);
+    }
+
+    /// <summary>按设置注册 / 注销全局快捷键。返回是否注册成功（关闭快捷键时返回 true）。</summary>
+    private bool ApplyHotkey(AppSettings settings)
+    {
+        if (_hotkeys is null)
+            return true;
+
+        uint key = settings.HotkeyKey <= 0 ? 0u : (uint)settings.HotkeyKey;
+        return _hotkeys.Apply(settings.HotkeyModifiers, key, settings.EnableHotkey);
     }
 
     private async Task TriggerSaverHudAsync()
@@ -177,7 +223,23 @@ public partial class App : Application
         await _hud.ShowSimpleAsync(snapshot);
     }
 
-    private async Task TriggerHudAsync()
+    /// <summary>拔电：完整三态动画的「电池模式」——波纹向内收拢，暗示能量在流出。</summary>
+    private async Task TriggerBatteryHudAsync()
+    {
+        if (_hud is null) return;
+
+        var snapshot = await Task.Run(() => BatteryService.GetSnapshot());
+        await _hud.ShowAndPlayAsync(snapshot, acOnline: false, HudPlayMode.Battery);
+    }
+
+    /// <summary>弹出电量 HUD（真实电池数据 + 完整三态动画）。</summary>
+    /// <param name="checkAlerts">是否顺带检查低电量 / 充满提醒。插拔电源时为 true，快捷键唤起时为 false。</param>
+    /// <param name="replayIntro">
+    /// HUD 正在播三态动画时是否重播开场。快捷键唤起传 false —— 重播会先撤掉上一轮动画，
+    /// 画面会"灭"一下再重新弹出电标；传 false 时 HudWindow 改成续住当前停留段。
+    /// 插拔电源 / 托盘预览保持 true（状态变了就该重新播一遍）。
+    /// </param>
+    private async Task TriggerHudAsync(bool checkAlerts = true, bool replayIntro = true)
     {
         if (_hud is null) return;
 
@@ -187,10 +249,11 @@ public partial class App : Application
             return (BatteryService.GetSnapshot(), ac);
         });
 
-        await _hud.ShowAndPlayAsync(snapshot, acOnline);
-
+        // 文案/波纹跟着真实电源状态走：未插电时不该再显示「超充模式」
+        var mode = acOnline ? HudPlayMode.Charge : HudPlayMode.Battery;
+        await _hud.ShowAndPlayAsync(snapshot, acOnline, mode, replayIntro: replayIntro);
         // 检查提醒条件
-        if (snapshot is not null)
+        if (checkAlerts && snapshot is not null)
             CheckAlerts(snapshot);
     }
 
@@ -395,6 +458,9 @@ public partial class App : Application
 
     private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
     {
+
+        _hotkeys?.Dispose();
+        _hotkeys = null;
         _watcher?.Dispose();
         _watcher = null;
 

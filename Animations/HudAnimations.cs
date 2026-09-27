@@ -55,6 +55,9 @@ public sealed record AnimationOptions
 ///
 /// 以上为 6s 基线时间线。实际播放时：入场段（0→0.42）保持基线绝对时长，
 /// 停留段按 DurationSeconds 拉伸/压缩（见 MapCue）。
+/// 电池模式（拔电）复用同一条时间线，只把三圈波纹整段镜像成「向内收拢」（见 RippleIn），
+/// 文案换成「/// 电池模式」——「能量注入」与「能量流出」共用一套骨骼，一眼能看出是同一套 HUD。
+///
 /// 注意：KeyFrame 的 Cue 必须严格递增（乱序会让某一段被压缩到 30ms，位移看起来像瞬移）。
 /// </summary>
 internal static class HudAnimations
@@ -106,6 +109,51 @@ internal static class HudAnimations
         if (cue <= IntroEndCue)
             return cue / IntroEndCue * introFrac;
         return introFrac + (cue - IntroEndCue) / (1 - IntroEndCue) * (1 - introFrac);
+    }
+
+    /// <summary>时长设置的安全区间（秒）。</summary>
+    private static double ClampedDuration(AnimationOptions o) => Math.Clamp(o.DurationSeconds, 3d, 10d);
+
+    /// <summary>
+    /// 入场段固定时长（秒）：cue 0→0.42 的绝对时间恒为 0.42×6s = 2.52s，
+    /// 与时长设置无关（见 MapCue）。用来判断"开场是否已经走完"。
+    /// </summary>
+    public static double IntroSeconds => IntroEndCue * BaselineSeconds;
+
+    /// <summary>C 态停留段时长（秒）：随时长设置伸缩，即收尾前的有效展示时间。</summary>
+    public static double DwellSeconds(AnimationOptions o)
+        => (MapCue(o, THoldC) - MapCue(o, IntroEndCue)) * ClampedDuration(o);
+
+    /// <summary>
+    /// 收尾（整体缩小）开始的绝对时刻（秒）。超过它画面已经在缩没，再度唤起
+    /// 按"重播开场"处理反而更自然（那时屏幕上本来就没有内容，看不到闪灭）。
+    /// </summary>
+    public static double CloseStartSeconds(AnimationOptions o)
+        => MapCue(o, THoldC) * ClampedDuration(o);
+
+    /// <summary>
+    /// 「续住 C 态」的收尾动画：画面保持不动（scale 1）停留 <see cref="DwellSeconds"/>，
+    /// 再整体缩回。播放中再次唤起时用它替换整条时间线 —— 不重播入场，
+    /// 相当于把停留计时重新开始，全程画面连续（不会先"灭"一下再重新弹出电标）。
+    ///
+    /// 之所以只跑这一路：C 态停留段里其余 16 路动画都是静止值（见各条时间线的最后一个
+    /// KeyFrame），把它们钉成局部值即可，只有 ScaleHost 的收尾需要真正再动一次。
+    /// </summary>
+    public static Animation DwellTail(AnimationOptions o)
+    {
+        double hold = DwellSeconds(o);
+        double close = ClampedDuration(o) * (TClose - THoldC);  // 收尾时长按完整时间线的同一比例
+        double total = Math.Max(0.05d, hold + close);
+
+        var a = new Animation
+        {
+            Duration = TimeSpan.FromSeconds(total),
+            FillMode = FillMode.Forward,
+        };
+        a.Children.Add(KF(0d, null, SX(1d), SY(1d)));
+        a.Children.Add(KF(Math.Clamp(hold / total, 0d, 0.99d), KS_In, SX(1d), SY(1d)));
+        a.Children.Add(KF(1d, KS_In, SX(0d), SY(0d)));
+        return a;
     }
 
     // ===================================================================
@@ -283,7 +331,32 @@ internal static class HudAnimations
         return a;
     }
 
-    // ---------------- 简化版（拔电显示电量） ----------------
+    /// <summary>
+    /// 单圈波纹（收拢态 · 电池模式）：充电是「由内向外扩散」（能量注入），
+    /// 电池模式整段镜像——环先在最外层浮现，再向电标圆心收拢并被吸进去，
+    /// 暗示能量正在被消耗 / 流出。缓动也镜像：扩散用 KS_Out（先快后慢），
+    /// 收拢用 KS_In（先慢后快）。三圈收拢终点按顺序略微错开，避免叠成一坨。
+    /// </summary>
+    public static Animation RippleIn(AnimationOptions o, double endScale, double peakOp)
+    {
+        double spread = Math.Clamp(o.RippleSpread, 0.5d, 1.5d);
+        double intensity = Math.Clamp(o.RippleIntensity, 0d, 2d);
+        double target = endScale * spread;
+        double peak = Math.Min(1d, peakOp * intensity);
+        double inner = 0.10d + endScale * 0.032d;  // 1.5→0.148 / 2.0→0.164 / 2.5→0.180
+
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0), SX(target), SY(target)));
+        a.Children.Add(KF(MapCue(o, TExpand), KS_Out, Op(0), SX(target), SY(target)));
+        // 环是在最外层「浮现」的，若沿用扩散那 0.02 的淡入窗口，一整圈大环会在 0.1s 内闪出来；
+        // 所以淡入拉长到 0.07（约 0.4s）并同步先收一点点，出场才不带爆闪。
+        a.Children.Add(KF(MapCue(o, TExpand + 0.07), KS_In, Op(peak), SX(target * 0.86d), SY(target * 0.86d)));
+        a.Children.Add(KF(MapCue(o, THoldB), KS_InOut, Op(peak), SX(inner), SY(inner)));
+        a.Children.Add(KF(MapCue(o, TContract), KS_InOut, Op(0), SX(inner * 0.30d), SY(inner * 0.30d)));
+        return a;
+    }
+
+    // ---------------- 简化版（省电模式关闭等快速电量提示） ----------------
     // 只弹"电量圆胶囊"：无电标先出、无工业模式矩形、无波纹。直接全圆胶囊 + 电量内容。
 
     private const double SimpleBaselineSeconds = 5.0;

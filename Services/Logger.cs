@@ -12,7 +12,17 @@ public static class Logger
     private static readonly string LogDir = Path.Combine(
         Path.GetTempPath(), "EndfieldCharge");
 
-    public static bool Enabled { get; set; }
+    private static readonly object Gate = new();
+
+    // volatile：日志开关由 UI 线程写入，PowerWatcher / HotkeyService 的后台消息线程读取。
+    // 不用 volatile 时后台线程可能长期读到缓存里的 false，导致关键告警（如隐藏窗口创建失败）静默丢失。
+    private static volatile bool _enabled;
+
+    public static bool Enabled
+    {
+        get => _enabled;
+        set => _enabled = value;
+    }
 
     public static void Info(string msg) => Write("INFO", msg);
     public static void Warn(string msg) => Write("WARN", msg);
@@ -24,15 +34,20 @@ public static class Logger
         if (!Enabled)
             return;
 
-        try
+        // 加锁：后台消息线程 / UI 线程 / 电源线程可能同时写日志，
+        // 并发 AppendAllText 会因共享冲突抛异常并被吞掉，导致个别行静默丢失。
+        lock (Gate)
         {
-            Directory.CreateDirectory(LogDir);
-            var path = Path.Combine(LogDir, $"log-{DateTime.Now:yyyyMMdd}.txt");
-            File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss.fff}] [{level}] {msg}\n");
-        }
-        catch
-        {
-            // 日志写入失败忽略
+            try
+            {
+                Directory.CreateDirectory(LogDir);
+                var path = Path.Combine(LogDir, $"log-{DateTime.Now:yyyyMMdd}.txt");
+                File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss.fff}] [{level}] {msg}\n");
+            }
+            catch
+            {
+                // 日志写入失败忽略
+            }
         }
     }
 }

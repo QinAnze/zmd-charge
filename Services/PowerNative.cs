@@ -281,4 +281,26 @@ internal static class PowerNative
 
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
+
+    // ---------- 全局快捷键 ----------
+
+    /// <summary>WM_HOTKEY：RegisterHotKey 注册的组合键被按下。</summary>
+    public const int WmHotkey = 0x0312;
+
+    public const uint ModAlt = 0x0001;
+    public const uint ModControl = 0x0002;
+    public const uint ModShift = 0x0004;
+    public const uint ModWin = 0x0008;
+
+    /// <summary>按住不放时不重复触发（Windows 7+）。仅注册时用，不写入设置。</summary>
+    public const uint ModNoRepeat = 0x4000;
+
+    /// <summary>注册全局快捷键。同一 (hWnd, id) 重复注册会失败，需先 UnregisterHotKey。</summary>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }

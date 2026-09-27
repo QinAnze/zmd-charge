@@ -28,6 +28,8 @@ public static class Localization
     public static string TitleMode => IsChinese ? "超充模式" : "Super Charge Mode";
     public static string TagLineSaver => IsChinese ? "/// 省电模式" : "/// POWER SAVING MODE";
     public static string TitleSaver => IsChinese ? "省电模式" : "Power Saving Mode";
+    public static string TagLineBattery => IsChinese ? "/// 电池模式" : "/// BATTERY MODE";
+    public static string TitleBattery => IsChinese ? "电池模式" : "Battery Mode";
 
     // ---- 托盘菜单 ----
     public static string PreviewHud => IsChinese ? "预览电量 HUD" : "Preview Power HUD";
@@ -84,7 +86,7 @@ public static class Localization
     public static string LabelRippleSpread => IsChinese ? "波纹幅度" : "Ripple Spread";
     public static string LabelPlayMode => IsChinese ? "播放模式" : "Play Mode";
     public static string ModePlug => IsChinese ? "插电（完整三态）" : "Plug In (Full Sequence)";
-    public static string ModeUnplug => IsChinese ? "拔电（简化胶囊）" : "Unplug (Simple Capsule)";
+    public static string ModeUnplug => IsChinese ? "未插电（电池模式）" : "Unplug (Battery Mode)";
     public static string ModeSaver => IsChinese ? "省电模式（完整三态）" : "Battery Saver (Full Sequence)";
 
     // ---- 通知 ----
@@ -128,4 +130,28 @@ public static class Localization
     public static string BtnInstallFont => IsChinese ? "安装 Inter 字体" : "Install Inter Font";
     public static string FontInstalling => IsChinese ? "正在打开字体下载页…" : "Opening font download page...";
     public static string FontInstalled => IsChinese ? "下载后双击 Inter.ttf 文件即可安装" : "Download and double-click Inter.ttf to install";
+
+    // ---- 全局快捷键 ----
+    public static string SectionHotkey => IsChinese ? "快捷键" : "Hotkey";
+    public static string LabelHotkeyEnable => IsChinese ? "启用全局快捷键" : "Enable Global Hotkey";
+    public static string DescHotkey => IsChinese
+        ? "在任意界面按下组合键即可唤起电量 HUD"
+        : "Press the shortcut anywhere to show the power HUD";
+    public static string LabelHotkeyKeys => IsChinese ? "唤起 HUD" : "Show HUD";
+    public static string HotkeyRecording => IsChinese ? "请按下组合键…" : "Press a key combination...";
+    public static string HotkeyIdleHint => IsChinese
+        ? "点击方框后按下组合键，Esc 取消"
+        : "Click the box, then press a combination; Esc to cancel";
+    public static string HotkeyNeedModifier => IsChinese
+        ? "请至少配合一个修饰键（Ctrl / Alt / Shift / Win），F1–F24 可单独使用"
+        : "Use at least one modifier (Ctrl / Alt / Shift / Win); F1-F24 can be used alone";
+    public static string HotkeyUnsupported => IsChinese
+        ? "该按键不支持作为快捷键，请换一个"
+        : "That key cannot be used as a shortcut, try another";
+    public static string HotkeyConflict => IsChinese
+        ? "快捷键已被其它程序占用，注册失败"
+        : "Hotkey is already taken by another app; registration failed";
+    public static string HotkeyDisabled => IsChinese
+        ? "全局快捷键已关闭"
+        : "Global hotkey is disabled";
 }

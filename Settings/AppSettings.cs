@@ -26,6 +26,15 @@ public sealed record AppSettings
     public bool EnableFullChargeAlert { get; init; } = true;
     public bool EnablePowerSaverNotify { get; init; } = true;
     public bool EnableAutoStart { get; init; } = false;
+
+    /// <summary>启用全局快捷键唤起 HUD。</summary>
+    public bool EnableHotkey { get; init; } = true;
+
+    /// <summary>快捷键修饰键位掩码（MOD_CONTROL|MOD_ALT|MOD_SHIFT|MOD_WIN）。默认 Ctrl + Alt。</summary>
+    public uint HotkeyModifiers { get; init; } = 3;
+
+    /// <summary>快捷键虚键码（Win32 VK）。默认 0x48 = H，即 Ctrl + Alt + H。</summary>
+    public int HotkeyKey { get; init; } = 0x48;
 }
 
 public enum HudPosition

@@ -409,6 +409,44 @@ internal static class HudAnimations
         return a;
     }
 
+    // ---------------- 额外适配器药丸（插件适配器，一适配器一粒） ----------------
+    // 主药丸走完整三态；额外药丸只做「延迟淡入 → 停留 → 随整体收尾淡出」，
+    // 时长与主时间线一致（New/NewSimple），时序上等主药丸稳定后再进场。
+
+    private const double TExtraIn = 0.44;     // 主药丸电量数字 0.42 出现之后再进场
+    private const double TExtraReady = 0.50;
+    private const double ExtraStagger = 0.03; // 多粒药丸依次错开淡入
+
+    /// <summary>完整三态时间线下的额外药丸动画；index 用于多粒药丸错峰淡入。</summary>
+    public static Animation ExtraPill(AnimationOptions o, int index = 0)
+    {
+        double tin = TExtraIn + ExtraStagger * index;
+        double tready = TExtraReady + ExtraStagger * index;
+
+        var a = New(o);
+        a.Children.Add(KF(MapCue(o, 0d), null, Op(0), TY(14)));
+        a.Children.Add(KF(MapCue(o, tin), KS_In, Op(0), TY(14)));
+        a.Children.Add(KF(MapCue(o, tready), KS_Out, Op(1), TY(0)));
+        a.Children.Add(KF(MapCue(o, THoldC), KS_In, Op(1), TY(0)));
+        a.Children.Add(KF(MapCue(o, TClose), KS_In, Op(0), TY(0)));
+        return a;
+    }
+
+    /// <summary>简化时间线（ShowSimpleAsync）下的额外药丸动画。</summary>
+    public static Animation ExtraPillSimple(AnimationOptions o, int index = 0)
+    {
+        double tin = 0.08 + ExtraStagger * index;
+        double tready = 0.16 + ExtraStagger * index;
+
+        var a = NewSimple(o);
+        a.Children.Add(KF(MapCueSimple(o, 0d), null, Op(0), TY(14)));
+        a.Children.Add(KF(MapCueSimple(o, tin), KS_In, Op(0), TY(14)));
+        a.Children.Add(KF(MapCueSimple(o, tready), KS_Out, Op(1), TY(0)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleHold), KS_In, Op(1), TY(0)));
+        a.Children.Add(KF(MapCueSimple(o, TSimpleClose), KS_In, Op(0), TY(0)));
+        return a;
+    }
+
     // ---------------- 构造辅助 ----------------
 
     private static Animation New(AnimationOptions o) => new()

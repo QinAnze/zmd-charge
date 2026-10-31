@@ -37,6 +37,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Contract 是主程序内的普通源码文件夹（.cs 直接编译进主程序）；
+         排除其历史子项目构建产物，避免被默认 glob 当作源码重复编译 -->
+    <Compile Remove="Contract\bin\**" />
+    <Compile Remove="Contract\obj\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 

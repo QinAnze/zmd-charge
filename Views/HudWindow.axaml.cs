@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -7,13 +8,17 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using EndfieldCharge.Animations;
+using EndfieldCharge.Contract;
 using EndfieldCharge.Services;
 using EndfieldCharge.Settings;
+using ShapePath = Avalonia.Controls.Shapes.Path;
 
 namespace EndfieldCharge.Views;
 
@@ -47,6 +52,9 @@ public partial class HudWindow : Window
 
     /// <summary>当前在播哪套动画（None = 没在播）。播放中再次唤起靠它判断能不能"续住"。</summary>
     private PlayKind _play = PlayKind.None;
+
+    /// <summary>本轮展示的插件适配器药丸（主药丸之外，一适配器一粒）。</summary>
+    private readonly List<Border> _extraPills = [];
 
     /// <summary>本轮播放已过去的墙钟时间：判断开场是否走完、是否还在 C 态停留段。</summary>
     private readonly Stopwatch _playClock = new();
@@ -94,9 +102,9 @@ public partial class HudWindow : Window
 
     // ---------------- 动画播放 ----------------
 
-    public async Task ShowSimpleAsync(BatterySnapshot? battery, AnimationOptions? options = null)
+    public async Task ShowSimpleAsync(IReadOnlyList<AdapterReading> readings, AnimationOptions? options = null)
     {
-        ApplyBattery(battery, acOnline: false);
+        ApplyReadings(readings);
 
         var o = options ?? _animOptions;
 
@@ -113,13 +121,19 @@ public partial class HudWindow : Window
         _play = PlayKind.Simple;
         _playClock.Restart();
 
+        var tasks = new List<Task>
+        {
+            HudAnimations.SimplePillAppear(o).RunAsync(Pill, ct),
+            HudAnimations.SimpleFadeIn(o).RunAsync(BoltIcon, ct),
+            HudAnimations.SimpleFadeIn(o).RunAsync(NumHost, ct),
+            HudAnimations.SimpleScaleOut(o).RunAsync(ScaleHost, ct),
+        };
+        tasks.AddRange(_extraPills.Select(
+            (pill, i) => HudAnimations.ExtraPillSimple(o, i).RunAsync(pill, ct)));
+
         try
         {
-            await Task.WhenAll(
-                HudAnimations.SimplePillAppear(o).RunAsync(Pill, ct),
-                HudAnimations.SimpleFadeIn(o).RunAsync(BoltIcon, ct),
-                HudAnimations.SimpleFadeIn(o).RunAsync(NumHost, ct),
-                HudAnimations.SimpleScaleOut(o).RunAsync(ScaleHost, ct));
+            await Task.WhenAll(tasks);
         }
         catch (OperationCanceledException)
         {
@@ -133,13 +147,13 @@ public partial class HudWindow : Window
     }
 
     public async Task ShowAndPlayAsync(
-        BatterySnapshot? battery,
+        IReadOnlyList<AdapterReading> readings,
         bool acOnline,
         HudPlayMode mode = HudPlayMode.Charge,
         AnimationOptions? options = null,
         bool replayIntro = true)
     {
-        ApplyBattery(battery, acOnline);
+        ApplyReadings(readings);
 
         // 文案主题：充电 = 超充模式；电池 = 电池模式；省电 = 省电模式
         (TagLineText.Text, TitleText.Text) = mode switch
@@ -188,26 +202,32 @@ public partial class HudWindow : Window
         Func<AnimationOptions, double, double, Animation> ripple =
             mode == HudPlayMode.Battery ? HudAnimations.RippleIn : HudAnimations.Ripple;
 
+        var tasks = new List<Task>
+        {
+            HudAnimations.PillCorner(o).RunAsync(Pill, ct),
+            HudAnimations.PillAppear(o).RunAsync(Pill, ct),
+            HudAnimations.PillHeight(o).RunAsync(Pill, ct),
+            HudAnimations.PillHeight(o).RunAsync(RippleHost, ct),
+            HudAnimations.ScaleOut(o).RunAsync(ScaleHost, ct),
+            HudAnimations.BoltIcon(o).RunAsync(BoltIcon, ct),
+            HudAnimations.RippleHost(o).RunAsync(RippleHost, ct),
+            HudAnimations.CircleForm(o).RunAsync(CircleForm, ct),
+            HudAnimations.SquareForm(o).RunAsync(SquareForm, ct),
+            HudAnimations.TitleHost(o).RunAsync(TitleHost, ct),
+            HudAnimations.NumHost(o).RunAsync(NumHost, ct),
+            ripple(o, 1.5, 0.50).RunAsync(RippleInner, ct),
+            ripple(o, 2.0, 0.50).RunAsync(RippleMid, ct),
+            ripple(o, 2.5, 0.60).RunAsync(RippleOuter, ct),
+            HudAnimations.RippleRise(o).RunAsync(RippleInnerHost, ct),
+            HudAnimations.RippleRise(o).RunAsync(RippleMidHost, ct),
+            HudAnimations.RippleRise(o).RunAsync(RippleOuterHost, ct),
+        };
+        tasks.AddRange(_extraPills.Select(
+            (pill, i) => HudAnimations.ExtraPill(o, i).RunAsync(pill, ct)));
+
         try
         {
-            await Task.WhenAll(
-                HudAnimations.PillCorner(o).RunAsync(Pill, ct),
-                HudAnimations.PillAppear(o).RunAsync(Pill, ct),
-                HudAnimations.PillHeight(o).RunAsync(Pill, ct),
-                HudAnimations.PillHeight(o).RunAsync(RippleHost, ct),
-                HudAnimations.ScaleOut(o).RunAsync(ScaleHost, ct),
-                HudAnimations.BoltIcon(o).RunAsync(BoltIcon, ct),
-                HudAnimations.RippleHost(o).RunAsync(RippleHost, ct),
-                HudAnimations.CircleForm(o).RunAsync(CircleForm, ct),
-                HudAnimations.SquareForm(o).RunAsync(SquareForm, ct),
-                HudAnimations.TitleHost(o).RunAsync(TitleHost, ct),
-                HudAnimations.NumHost(o).RunAsync(NumHost, ct),
-                ripple(o, 1.5, 0.50).RunAsync(RippleInner, ct),
-                ripple(o, 2.0, 0.50).RunAsync(RippleMid, ct),
-                ripple(o, 2.5, 0.60).RunAsync(RippleOuter, ct),
-                HudAnimations.RippleRise(o).RunAsync(RippleInnerHost, ct),
-                HudAnimations.RippleRise(o).RunAsync(RippleMidHost, ct),
-                HudAnimations.RippleRise(o).RunAsync(RippleOuterHost, ct));
+            await Task.WhenAll(tasks);
         }
         catch (OperationCanceledException)
         {
@@ -287,7 +307,16 @@ public partial class HudWindow : Window
     private const double RingDiameter = 46d;
     private const double RingThickness = 4.5d;
 
-    private void ApplyBattery(BatterySnapshot? snap, bool acOnline)
+    /// <summary>应用适配器读数：第一位（内置适配器）驱动主药丸，其余各自生成一粒药丸排在下方。</summary>
+    private void ApplyReadings(IReadOnlyList<AdapterReading> readings)
+    {
+        var primary = readings.Count > 0 ? readings[0] : null;
+
+        ApplyBattery(primary?.Snapshot);
+        BuildExtraPills(readings.Skip(1));
+    }
+
+    private void ApplyBattery(BatterySnapshot? snap)
     {
         double fraction = 0d;
 
@@ -315,6 +344,170 @@ public partial class HudWindow : Window
         LaptopBase.Background = new SolidColorBrush(badgeColor);
         BadgeElectrode.Background = new SolidColorBrush(badgeColor);
     }
+
+    // ---------------- 插件适配器药丸 ----------------
+
+    /// <summary>重建插件适配器药丸（每次展示前调用，数据总是最新）。</summary>
+    private void BuildExtraPills(IEnumerable<AdapterReading> extras)
+    {
+        _extraPills.Clear();
+        ExtraPillsHost.Children.Clear();
+
+        foreach (var reading in extras)
+        {
+            var pill = BuildExtraPill(reading);
+            _extraPills.Add(pill);
+            ExtraPillsHost.Children.Add(pill);
+        }
+    }
+
+    /// <summary>
+    /// 构建一粒插件适配器药丸：与主药丸同款 560×60 圆胶囊，
+    /// 左侧电标方块 + 适配器名，右侧百分比 + 插头徽章（进度环按电量着色，&lt;20% 变红）。
+    /// </summary>
+    private Border BuildExtraPill(AdapterReading reading)
+    {
+        var snap = reading.Snapshot;
+        bool low = snap is not null && snap.HasBattery && snap.Percent < 20;
+        var accent = new SolidColorBrush(low ? BadgeColorLow : BadgeColorNormal);
+
+        var pill = new Border
+        {
+            Width = 560,
+            Height = 60,
+            CornerRadius = new CornerRadius(30),
+            Background = new SolidColorBrush(Color.Parse("#FF312F30")),
+            ClipToBounds = true,
+            Opacity = 0,
+            RenderTransform = new TranslateTransform(0, 14),
+        };
+
+        // 列结构对齐主药丸 NumHost：左内边距 32 + 电标 18 + 间隙 14 + 名称 + 留空 + 百分比 + 间隙 + 徽章 + 右内边距 5
+        var layout = new Grid { Width = 560, VerticalAlignment = VerticalAlignment.Center };
+        layout.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(32)));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(18)));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(14)));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(14)));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        layout.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(5)));
+
+        // 电标方块（与主药丸 C 态同款）
+        var bolt = new Border
+        {
+            Width = 18,
+            Height = 18,
+            CornerRadius = new CornerRadius(4.5),
+            Background = new SolidColorBrush(Color.Parse("#FFE9E7E4")),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new PathIcon
+            {
+                Width = 12,
+                Height = 12,
+                Data = ResolveGeometry("Geo.Bolt"),
+                Foreground = new SolidColorBrush(Color.Parse("#FF141313")),
+            },
+        };
+        Grid.SetColumn(bolt, 1);
+        layout.Children.Add(bolt);
+
+        // 适配器名
+        var name = new TextBlock
+        {
+            Text = reading.Adapter.Name,
+            FontFamily = ResolveFont("Hud.FontFamily"),
+            FontSize = 16,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = Brushes.White,
+            Opacity = 0.85,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(name, 3);
+        layout.Children.Add(name);
+
+        // 百分比（与主药丸同款数字字体）
+        var pct = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 1,
+        };
+        pct.Children.Add(new TextBlock
+        {
+            Text = snap is not null && snap.HasBattery ? snap.Percent.ToString() : "--",
+            FontFamily = ResolveFont("Hud.FontFamilyNumeric"),
+            FontSize = 22,
+            FontWeight = FontWeight.Medium,
+            Foreground = Brushes.White,
+        });
+        pct.Children.Add(new TextBlock
+        {
+            Text = "%",
+            FontFamily = ResolveFont("Hud.FontFamilyNumeric"),
+            FontSize = 13,
+            FontWeight = FontWeight.Medium,
+            Foreground = Brushes.White,
+            Opacity = 0.55,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        Grid.SetColumn(pct, 5);
+        layout.Children.Add(pct);
+
+        // 插头徽章：进度环 + 插头图标（区别于主药丸的笔记本电脑徽章）
+        double fraction = snap is not null && snap.HasBattery
+            ? Math.Clamp(snap.Percent / 100d, 0d, 1d)
+            : 0d;
+
+        var badge = new Grid { Width = 46, Height = 46, VerticalAlignment = VerticalAlignment.Center };
+        badge.Children.Add(new Ellipse
+        {
+            Width = 46,
+            Height = 46,
+            Fill = new SolidColorBrush(Color.Parse("#FF262425")),
+        });
+        badge.Children.Add(new ShapePath
+        {
+            Width = 46,
+            Height = 46,
+            Stroke = accent,
+            StrokeThickness = 4.5,
+            StrokeLineCap = PenLineCap.Round,
+            Data = BuildRingGeometry(fraction, RingDiameter, RingThickness),
+        });
+        badge.Children.Add(new PathIcon
+        {
+            Width = 12,
+            Height = 12,
+            Data = ResolveGeometry("Geo.Plug"),
+            Foreground = accent,
+        });
+        Grid.SetColumn(badge, 7);
+        layout.Children.Add(badge);
+
+        pill.Child = layout;
+        return pill;
+    }
+
+    /// <summary>把额外药丸钉在"完全可见"状态：撤掉动画后属性回落到局部值，不钉住会瞬间消失。</summary>
+    private void PinExtraPills()
+    {
+        foreach (var pill in _extraPills)
+        {
+            pill.Opacity = 1;
+            if (pill.RenderTransform is TranslateTransform t)
+                t.Y = 0;
+        }
+    }
+
+    /// <summary>从窗口资源里取图标几何；取不到返回 null（图标不渲染，不影响其余内容）。</summary>
+    private Geometry? ResolveGeometry(string key)
+        => TryGetResource(key, ActualThemeVariant, out var v) && v is Geometry g ? g : null;
+
+    /// <summary>从窗口资源里取字体；取不到回落到默认字体（仅防御，正常必有）。</summary>
+    private FontFamily ResolveFont(string key)
+        => TryGetResource(key, ActualThemeVariant, out var v) && v is FontFamily f ? f : FontFamily.Default;
 
     private static Geometry BuildRingGeometry(double fraction, double diameter, double thickness)
     {
@@ -453,6 +646,9 @@ public partial class HudWindow : Window
 
         NumHost.RenderTransform = new TranslateTransform(0d, 0d);
         NumHost.Opacity = 1;
+
+        // 额外药丸一并钉住（C 态停留段里它们同样只有静止值）
+        PinExtraPills();
     }
 
     private void SetSimpleCState()

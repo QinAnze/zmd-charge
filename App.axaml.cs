@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -7,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using EndfieldCharge.Contract;
 using EndfieldCharge.Services;
 using EndfieldCharge.Settings;
 using EndfieldCharge.Views;
@@ -23,6 +25,7 @@ public partial class App : Application
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private bool _lastLowBatteryNotified;
     private HotkeyService? _hotkeys;
+    private AdapterManager? _adapters;
 
     public override void Initialize()
     {
@@ -58,6 +61,9 @@ public partial class App : Application
         _hud = new HudWindow();
         _hud.ApplySettings(_settings);
 
+        // 适配器：内置电池（主药丸）+ adapters\ 目录下的插件（各自一粒药丸）
+        _adapters = new AdapterManager();
+
         SetupTrayIcon();
         StartPowerWatching();
 
@@ -65,6 +71,8 @@ public partial class App : Application
         // 调试命令行参数
         if (HasCommandLineArg("--demo"))
             _ = PreviewWithSampleDataAsync();
+        else if (HasCommandLineArg("--demo-multi"))
+            _ = PreviewMultiAdapterAsync();
         else if (HasCommandLineArg("--preview-unplug"))
             _ = PreviewBatteryAsync();
         else if (HasCommandLineArg("--preview-simple"))
@@ -109,6 +117,10 @@ public partial class App : Application
 
     // ---------------- 预览 ----------------
 
+    /// <summary>把样本快照包装成单适配器读数（主药丸不显示名称，适配器仅作占位）。</summary>
+    private static AdapterReading SampleReading(BatterySnapshot? snap)
+        => new(new StaticAdapter("sample", "Sample"), snap);
+
     private async Task PreviewWithSampleDataAsync()
     {
         if (_hud is null) return;
@@ -117,7 +129,7 @@ public partial class App : Application
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: true, Charging: true);
 
-        await _hud.ShowAndPlayAsync(sample, acOnline: true);
+        await _hud.ShowAndPlayAsync([SampleReading(sample)], acOnline: true);
     }
 
     /// <summary>--preview-unplug：未插电（电池模式）三态动画，样本数据。</summary>
@@ -129,7 +141,7 @@ public partial class App : Application
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: false, Charging: false);
 
-        await _hud.ShowAndPlayAsync(sample, acOnline: false, HudPlayMode.Battery);
+        await _hud.ShowAndPlayAsync([SampleReading(sample)], acOnline: false, HudPlayMode.Battery);
     }
 
     private async Task PreviewSimpleAsync()
@@ -140,7 +152,27 @@ public partial class App : Application
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: false, Charging: false);
 
-        await _hud.ShowSimpleAsync(sample);
+        await _hud.ShowSimpleAsync([SampleReading(sample)]);
+    }
+
+    /// <summary>--demo-multi：多适配器预览——主药丸（内置）+ 两粒插件样例药丸，验证纵向堆叠。</summary>
+    private async Task PreviewMultiAdapterAsync()
+    {
+        if (_hud is null) return;
+
+        var readings = new List<AdapterReading>
+        {
+            SampleReading(new BatterySnapshot(
+                RemainingWh: 62.4, FullWh: 90.0, Percent: 69, AcOnline: true, Charging: true)),
+            new AdapterReading(
+                new StaticAdapter("demo-phone", "演示手机"),
+                new BatterySnapshot(RemainingWh: 20.9, FullWh: 36.0, Percent: 58, AcOnline: false, Charging: false)),
+            new AdapterReading(
+                new StaticAdapter("demo-pad", "演示平板"),
+                new BatterySnapshot(RemainingWh: 3.6, FullWh: 30.0, Percent: 12, AcOnline: false, Charging: false)),
+        };
+
+        await _hud.ShowAndPlayAsync(readings, acOnline: true);
     }
 
     // ---------------- 电源监听 ----------------
@@ -204,35 +236,30 @@ public partial class App : Application
 
     private async Task TriggerSaverHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _adapters is null) return;
 
-        var snapshot = await Task.Run(() => BatteryService.GetSnapshot());
-        await _hud.ShowAndPlayAsync(snapshot, acOnline: true, HudPlayMode.PowerSaver);
+        var readings = await _adapters.ReadAllAsync();
+        await _hud.ShowAndPlayAsync(readings, acOnline: true, HudPlayMode.PowerSaver);
     }
 
     private async Task TriggerSimpleHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _adapters is null) return;
 
-        var (snapshot, _) = await Task.Run(() =>
-        {
-            PowerNative.TryGetAcOnline(out bool ac);
-            return (BatteryService.GetSnapshot(), ac);
-        });
-
-        await _hud.ShowSimpleAsync(snapshot);
+        var readings = await _adapters.ReadAllAsync();
+        await _hud.ShowSimpleAsync(readings);
     }
 
     /// <summary>拔电：完整三态动画的「电池模式」——波纹向内收拢，暗示能量在流出。</summary>
     private async Task TriggerBatteryHudAsync()
     {
-        if (_hud is null) return;
+        if (_hud is null || _adapters is null) return;
 
-        var snapshot = await Task.Run(() => BatteryService.GetSnapshot());
-        await _hud.ShowAndPlayAsync(snapshot, acOnline: false, HudPlayMode.Battery);
+        var readings = await _adapters.ReadAllAsync();
+        await _hud.ShowAndPlayAsync(readings, acOnline: false, HudPlayMode.Battery);
     }
 
-    /// <summary>弹出电量 HUD（真实电池数据 + 完整三态动画）。</summary>
+    /// <summary>弹出电量 HUD（所有适配器读数 + 完整三态动画；主药丸 = 第一位内置适配器）。</summary>
     /// <param name="checkAlerts">是否顺带检查低电量 / 充满提醒。插拔电源时为 true，快捷键唤起时为 false。</param>
     /// <param name="replayIntro">
     /// HUD 正在播三态动画时是否重播开场。快捷键唤起传 false —— 重播会先撤掉上一轮动画，
@@ -241,18 +268,19 @@ public partial class App : Application
     /// </param>
     private async Task TriggerHudAsync(bool checkAlerts = true, bool replayIntro = true)
     {
-        if (_hud is null) return;
+        if (_hud is null || _adapters is null) return;
 
-        var (snapshot, acOnline) = await Task.Run(() =>
-        {
-            PowerNative.TryGetAcOnline(out bool ac);
-            return (BatteryService.GetSnapshot(), ac);
-        });
+        // AC 状态只关乎本机（内置适配器）：决定文案主题与波纹方向
+        var acTask = Task.Run(() => PowerNative.TryGetAcOnline(out bool ac) && ac);
+        var readings = await _adapters.ReadAllAsync();
+        bool acOnline = await acTask;
+
+        var snapshot = readings.Count > 0 ? readings[0].Snapshot : null;
 
         // 文案/波纹跟着真实电源状态走：未插电时不该再显示「超充模式」
         var mode = acOnline ? HudPlayMode.Charge : HudPlayMode.Battery;
-        await _hud.ShowAndPlayAsync(snapshot, acOnline, mode, replayIntro: replayIntro);
-        // 检查提醒条件
+        await _hud.ShowAndPlayAsync(readings, acOnline, mode, replayIntro: replayIntro);
+        // 检查提醒条件（低电量 / 充满提醒只看本机电池）
         if (checkAlerts && snapshot is not null)
             CheckAlerts(snapshot);
     }

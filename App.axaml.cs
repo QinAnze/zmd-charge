@@ -61,8 +61,10 @@ public partial class App : Application
         _hud = new HudWindow();
         _hud.ApplySettings(_settings);
 
-        // 适配器：内置电池（主药丸）+ adapters\ 目录下的插件（各自一粒药丸）
+        // 适配器：内置电池（主药丸）+ adapters\ 目录下的插件（各自一粒药丸）。
+        // 构造只装内置适配器，插件在后台加载——慢插件（蓝牙/ADB 初始化）不能拖住托盘图标。
         _adapters = new AdapterManager();
+        _ = _adapters.LoadPluginsAsync();
 
         SetupTrayIcon();
         StartPowerWatching();

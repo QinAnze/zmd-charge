@@ -34,21 +34,47 @@ public sealed class AdapterManager
 
     private readonly List<IPowerAdapter> _adapters = [];
 
+    /// <summary>插件在后台线程加载，与 HUD 读取并发；两处都经此锁串行化对 _adapters 的访问。</summary>
+    private readonly object _loadLock = new();
+
     /// <summary>每个适配器最近一次成功读取的快照（按 Id 索引），超时时回退显示。</summary>
     private readonly ConcurrentDictionary<string, BatterySnapshot?> _lastGood = new(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyList<IPowerAdapter> Adapters => _adapters;
+    public IReadOnlyList<IPowerAdapter> Adapters
+    {
+        get { lock (_loadLock) return [.. _adapters]; }
+    }
 
     public AdapterManager()
     {
-        // 内置适配器固定第一位：主药丸（完整三态动画 + 插拔电事件）始终展示它
+        // 内置适配器固定第一位：主药丸（完整三态动画 + 插拔电事件）始终展示它。
+        // 只装内置的，插件留给 LoadPluginsAsync 后台加载——慢插件不能拖住托盘出现。
         _adapters.Add(new BuiltInBatteryAdapter());
-        LoadPlugins();
     }
+
+    /// <summary>后台加载 adapters\ 目录下的插件 DLL。立即返回，加载完成后插件药丸自动出现。</summary>
+    public Task LoadPluginsAsync() => Task.Run(() =>
+    {
+        try
+        {
+            LoadPlugins();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"扫描适配器插件目录失败：{ex.Message}");
+        }
+    });
 
     /// <summary>并发读取所有适配器；单个失败记日志并返回 null 快照，不影响其余适配器。</summary>
     public async Task<IReadOnlyList<AdapterReading>> ReadAllAsync()
-        => await Task.WhenAll(_adapters.Select(ReadSafeAsync));
+    {
+        // 后台可能正在加载插件，取快照后再并发读取，避免枚举中被修改
+        IPowerAdapter[] adapters;
+        lock (_loadLock)
+            adapters = [.. _adapters];
+
+        return await Task.WhenAll(adapters.Select(ReadSafeAsync));
+    }
 
     private async Task<AdapterReading> ReadSafeAsync(IPowerAdapter adapter)
     {
@@ -95,7 +121,8 @@ public sealed class AdapterManager
                     continue;
                 }
 
-                _adapters.Add(adapter);
+                lock (_loadLock)
+                    _adapters.Add(adapter);
                 Logger.Info($"已加载原生适配器插件：{adapter.Id}（{Path.GetFileName(dll)}）");
             }
             catch (Exception ex)

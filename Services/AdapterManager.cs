@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -28,7 +29,13 @@ public sealed class StaticAdapter(string id, string name, BatterySnapshot? snaps
 /// </summary>
 public sealed class AdapterManager
 {
+    /// <summary>单次读取超时：插件可能阻塞（蓝牙 / ADB 等慢源），超时即放弃本次、回退上次成功值，不拖累 HUD。</summary>
+    private static readonly TimeSpan ReadTimeout = TimeSpan.FromMilliseconds(800);
+
     private readonly List<IPowerAdapter> _adapters = [];
+
+    /// <summary>每个适配器最近一次成功读取的快照（按 Id 索引），超时时回退显示。</summary>
+    private readonly ConcurrentDictionary<string, BatterySnapshot?> _lastGood = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<IPowerAdapter> Adapters => _adapters;
 
@@ -43,17 +50,24 @@ public sealed class AdapterManager
     public async Task<IReadOnlyList<AdapterReading>> ReadAllAsync()
         => await Task.WhenAll(_adapters.Select(ReadSafeAsync));
 
-    private static async Task<AdapterReading> ReadSafeAsync(IPowerAdapter adapter)
+    private async Task<AdapterReading> ReadSafeAsync(IPowerAdapter adapter)
     {
         try
         {
-            var snap = await adapter.GetSnapshotAsync();
+            // WaitAsync 只是放弃等待：阻塞中的原生调用无法取消，任其在后台线程自生自灭
+            var snap = await adapter.GetSnapshotAsync().WaitAsync(ReadTimeout);
+            _lastGood[adapter.Id] = snap;
             return new AdapterReading(adapter, snap);
+        }
+        catch (TimeoutException)
+        {
+            Logger.Error($"适配器 {adapter.Id} 读取超时（>{ReadTimeout.TotalMilliseconds:0}ms），回退上次读数");
+            return new AdapterReading(adapter, _lastGood.GetValueOrDefault(adapter.Id));
         }
         catch (Exception ex)
         {
             Logger.Error($"适配器 {adapter.Id} 读取失败：{ex.Message}");
-            return new AdapterReading(adapter, null);
+            return new AdapterReading(adapter, _lastGood.GetValueOrDefault(adapter.Id));
         }
     }
 

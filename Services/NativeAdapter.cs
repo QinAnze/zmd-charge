@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using EndfieldCharge.Contract;
 
@@ -79,6 +81,8 @@ internal sealed class NativeAdapter : IPowerAdapter
 
     /// <summary>
     /// 尝试把原生 DLL 加载为适配器：必须导出 ec_get_snapshot，id/name 导出可选。
+    /// 先校验磁盘上的 PE 导出表，通过后才 NativeLibrary.Load（后者会执行 DllMain，
+    /// 不该给"恰好躺在 adapters\ 里的无关 DLL"执行机会）。
     /// 缺少必需导出返回 false（比如恰好放在 adapters\ 里的其他 DLL，不算错误）。
     /// </summary>
     public static bool TryCreate(string dllPath, out NativeAdapter? adapter)
@@ -91,6 +95,9 @@ internal sealed class NativeAdapter : IPowerAdapter
             Logger.Error($"ec_snapshot 结构体布局与预期不符（{size} != {ExpectedStructSize}），无法加载原生适配器插件");
             return false;
         }
+
+        if (!ExportsOnDisk(dllPath, "ec_get_snapshot"))
+            return false;
 
         var library = NativeLibrary.Load(dllPath);
         var dllName = Path.GetFileNameWithoutExtension(dllPath);
@@ -118,6 +125,88 @@ internal sealed class NativeAdapter : IPowerAdapter
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 从磁盘上的 PE 导出表确认 DLL 导出了指定符号（不加载、不执行 DllMain）。
+    /// 非 PE 文件 / 无导出表 / 没有该符号都返回 false，由调用方按"不是适配器插件"静默跳过。
+    /// </summary>
+    private static bool ExportsOnDisk(string dllPath, string exportName)
+    {
+        try
+        {
+            // Share.ReadWrite：插件可能正被安装器写入或被杀软短暂占用，别因此炸掉扫描
+            using var pe = new PEReader(File.Open(dllPath, new FileStreamOptions
+            {
+                Access = FileAccess.Read,
+                Share = FileShare.ReadWrite | FileShare.Delete,
+            }));
+
+            var table = pe.PEHeaders.PEHeader?.ExportTableDirectory;
+            if (table is not { RelativeVirtualAddress: > 0 })
+                return false;
+
+            // IMAGE_EXPORT_DIRECTORY：前 40 字节里只关心 NumberOfNames 与 AddressOfNames
+            var dir = pe.GetSectionData(table.Value.RelativeVirtualAddress).GetReader();
+            dir.ReadUInt32(); // Characteristics
+            dir.ReadUInt32(); // TimeDateStamp
+            dir.ReadUInt16(); // MajorVersion
+            dir.ReadUInt16(); // MinorVersion
+            dir.ReadUInt32(); // Name
+            dir.ReadUInt32(); // Base
+            dir.ReadUInt32(); // NumberOfFunctions
+            var nameCount = dir.ReadUInt32();
+            dir.ReadUInt32(); // AddressOfFunctions
+            var namesRva = dir.ReadUInt32();
+            dir.ReadUInt32(); // AddressOfNameOrdinals
+
+            if (nameCount > 100_000) // 正常插件个位数导出；异常表按不导出处理
+                return false;
+
+            for (uint i = 0; i < nameCount; i++)
+            {
+                var nameRva = pe.GetSectionData((int)(namesRva + i * 4)).GetReader().ReadUInt32();
+                var name = nameRva == 0 ? null : ReadAscii(pe, nameRva);
+                if (name is not null && name == exportName)
+                    return true;
+            }
+
+            return false;
+        }
+        catch (BadImageFormatException)
+        {
+            return false; // 不是有效 PE，等同"不是插件"
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"读取插件导出表失败 {Path.GetFileName(dllPath)}：{ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>读取导出表里的 null 结尾 ASCII 名字；越界/超长视为损坏，返回 null。</summary>
+    private static string? ReadAscii(PEReader pe, uint rva)
+    {
+        try
+        {
+            var r = pe.GetSectionData((int)rva).GetReader();
+            Span<byte> buf = stackalloc byte[256];
+            var len = 0;
+            while (len < buf.Length)
+            {
+                if (r.RemainingBytes == 0)
+                    return null;
+                var b = r.ReadByte();
+                if (b == 0)
+                    return Encoding.ASCII.GetString(buf[..len]);
+                buf[len++] = b;
+            }
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static EcAdapterString? ResolveStringExport(IntPtr library, string name)

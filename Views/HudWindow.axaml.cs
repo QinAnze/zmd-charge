@@ -307,7 +307,7 @@ public partial class HudWindow : Window
     private const double RingDiameter = 46d;
     private const double RingThickness = 4.5d;
 
-    /// <summary>应用适配器读数：第一位（内置适配器）驱动主药丸，其余各自生成一粒药丸排在下方。</summary>
+    /// <summary>应用适配器读数：第一位适配器驱动主药丸（有内置电池即内置，台式机则为第一个插件），其余各自生成一粒药丸排在下方。</summary>
     private void ApplyReadings(IReadOnlyList<AdapterReading> readings)
     {
         var primary = readings.Count > 0 ? readings[0] : null;

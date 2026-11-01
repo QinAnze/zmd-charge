@@ -261,7 +261,7 @@ public partial class App : Application
         await _hud.ShowAndPlayAsync(readings, acOnline: false, HudPlayMode.Battery);
     }
 
-    /// <summary>弹出电量 HUD（所有适配器读数 + 完整三态动画；主药丸 = 第一位内置适配器）。</summary>
+    /// <summary>弹出电量 HUD（所有适配器读数 + 完整三态动画；主药丸 = 第一位适配器：有内置电池即内置，台式机则为第一个插件）。</summary>
     /// <param name="checkAlerts">是否顺带检查低电量 / 充满提醒。插拔电源时为 true，快捷键唤起时为 false。</param>
     /// <param name="replayIntro">
     /// HUD 正在播三态动画时是否重播开场。快捷键唤起传 false —— 重播会先撤掉上一轮动画，
@@ -272,12 +272,18 @@ public partial class App : Application
     {
         if (_hud is null || _adapters is null) return;
 
-        // AC 状态只关乎本机（内置适配器）：决定文案主题与波纹方向
-        var acTask = Task.Run(() => PowerNative.TryGetAcOnline(out bool ac) && ac);
+        // AC 状态优先读本机电源：决定文案主题与波纹方向。台式机没有电池读不到时，
+        // 退回主药丸（此时是插件，如 UPS）快照里的 AC 状态
+        var acTask = Task.Run(() =>
+        {
+            bool ok = PowerNative.TryGetAcOnline(out bool ac);
+            return (ok, ac);
+        });
         var readings = await _adapters.ReadAllAsync();
-        bool acOnline = await acTask;
+        var (acRead, acNative) = await acTask;
 
         var snapshot = readings.Count > 0 ? readings[0].Snapshot : null;
+        bool acOnline = acRead ? acNative : snapshot?.AcOnline == true;
 
         // 文案/波纹跟着真实电源状态走：未插电时不该再显示「超充模式」
         var mode = acOnline ? HudPlayMode.Charge : HudPlayMode.Battery;

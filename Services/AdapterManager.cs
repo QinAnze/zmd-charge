@@ -20,8 +20,11 @@ public sealed class StaticAdapter(string id, string name, BatterySnapshot? snaps
 }
 
 /// <summary>
-/// 适配器注册表：内置适配器永远排第一（HUD 主药丸），其后是从 adapters\ 目录
+/// 适配器注册表：内置适配器排第一（HUD 主药丸），其后是从 adapters\ 目录
 /// 加载的原生插件适配器（每个插件各自一粒药丸，显示在主药丸下方）。
+/// 后台探测到本机没有内置电池（台式机）时，会摘掉内置适配器，让第一个插件
+/// 升为主药丸；而台式机上 Windows 识别到的"电池"通常就是 UPS，会照常按
+/// 内置电池处理（UPS 即主药丸）。
 ///
 /// 插件是 C 语言风格 ABI 的原生 DLL（导出 ec_* C 函数；C/C++/Rust/Go/Zig 等
 /// 语言都能写，契约见 Contract/ec_adapter.h），放在主程序目录的 adapters\ 下，
@@ -63,7 +66,39 @@ public sealed class AdapterManager
         {
             Logger.Error($"扫描适配器插件目录失败：{ex.Message}");
         }
+
+        ProbeBuiltInBattery();
     });
+
+    /// <summary>
+    /// 探测本机是否有内置电池（含 Windows 识别为电池的 UPS）：没有就摘掉内置适配器，
+    /// 让第一个插件升为主药丸，避免台式机上常驻一粒永远 "--" 的空主药丸。
+    /// </summary>
+    private void ProbeBuiltInBattery()
+    {
+        try
+        {
+            // BatteryService 内部就是 powrprof + WMI 兜底：台式机上 Win32_Battery
+            // 能查到的"电池"就是 UPS，有它就该按内置电池处理，保留为主药丸
+            if (BatteryService.GetSnapshot() is not null)
+                return;
+
+            lock (_loadLock)
+            {
+                var builtin = _adapters.FirstOrDefault(a => a.Id == BuiltInBatteryAdapter.AdapterId);
+                if (builtin is null)
+                    return;
+                _adapters.Remove(builtin);
+            }
+
+            _lastGood.TryRemove(BuiltInBatteryAdapter.AdapterId, out _);
+            Logger.Info("本机没有内置电池，已隐藏内置电池适配器，插件适配器升为主药丸");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"探测内置电池失败：{ex.Message}");
+        }
+    }
 
     /// <summary>并发读取所有适配器；单个失败记日志并返回 null 快照，不影响其余适配器。</summary>
     public async Task<IReadOnlyList<AdapterReading>> ReadAllAsync()

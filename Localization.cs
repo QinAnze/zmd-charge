@@ -31,6 +31,9 @@ public static class Localization
     public static string TagLineBattery => IsChinese ? "/// 电池模式" : "/// BATTERY MODE";
     public static string TitleBattery => IsChinese ? "电池模式" : "Battery Mode";
 
+    // ---- 适配器 ----
+    public static string BuiltInAdapterName => IsChinese ? "本机电池" : "Built-in Battery";
+
     // ---- 托盘菜单 ----
     public static string PreviewHud => IsChinese ? "预览电量 HUD" : "Preview Power HUD";
     public static string AutoStart => IsChinese ? "开机自启" : "Auto Start";

@@ -10,6 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using EndfieldCharge.Animations;
+using EndfieldCharge.Contract;
 using EndfieldCharge.Services;
 using EndfieldCharge.Views;
 
@@ -345,20 +346,24 @@ public partial class SettingsWindow : Window
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: false, Charging: false);
 
+        // 设置页预览只演示主药丸（内置适配器）
+        var pluggedInReading = new AdapterReading(new StaticAdapter("sample", "Sample"), pluggedIn);
+        var unpluggedReading = new AdapterReading(new StaticAdapter("sample", "Sample"), unplugged);
+
         try
         {
             switch (PreviewModeCombo.SelectedIndex)
             {
                 case 1:
-                    await _hud.ShowAndPlayAsync(pluggedIn, acOnline: true,
+                    await _hud.ShowAndPlayAsync([pluggedInReading], acOnline: true,
                         HudPlayMode.PowerSaver, options);
                     break;
                 case 2:
-                    await _hud.ShowAndPlayAsync(unplugged, acOnline: false,
+                    await _hud.ShowAndPlayAsync([unpluggedReading], acOnline: false,
                         HudPlayMode.Battery, options);
                     break;
                 default:
-                    await _hud.ShowAndPlayAsync(pluggedIn, acOnline: true,
+                    await _hud.ShowAndPlayAsync([pluggedInReading], acOnline: true,
                         HudPlayMode.Charge, options);
                     break;
             }

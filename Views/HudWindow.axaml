@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="160"
         x:Class="EndfieldCharge.Views.HudWindow"
-        Width="1200" Height="160"
+        Width="1200" SizeToContent="Height"
         Title="EndfieldCharge"
 
         SystemDecorations="None"
@@ -28,19 +28,30 @@
 
   <!-- 胶囊是固定尺寸的"灵动岛"（560×60），整段动画宽度不变，
        只有 CornerRadius 在全圆(30) ↔ 圆角矩形(12) 之间过渡。
-       ScaleHost 收尾整体缩放。 -->
-  <Grid x:Name="Root" Width="1200" Height="100" VerticalAlignment="Center">
+       ScaleHost 收尾整体缩放。
+       窗口高度自适应（SizeToContent）：主药丸 + 下方每个适配器一粒药丸。
+       上边距 35 + 主药丸区 90：保证单适配器时主药丸视觉位置与旧版固定 160 高窗口完全一致。 -->
+  <Grid x:Name="Root" Width="1200">
+    <StackPanel x:Name="HudStack"
+                Orientation="Vertical"
+                HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,35,0,35">
     <!-- 全局缩放 0.8：整个 HUD 缩小 20% -->
     <Grid x:Name="GlobalScale"
-          HorizontalAlignment="Center" VerticalAlignment="Center"
+          HorizontalAlignment="Center"
           RenderTransformOrigin="50%,50%">
       <Grid.RenderTransform>
         <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
       </Grid.RenderTransform>
 
-    <Grid x:Name="ScaleHost"
-          HorizontalAlignment="Center" VerticalAlignment="Center"
-          RenderTransformOrigin="50%,50%">
+      <StackPanel Orientation="Vertical" Spacing="10" HorizontalAlignment="Center">
+
+      <!-- ScaleHost 固定 560×90（B 态最大高度），子元素垂直居中：
+           撑高动画 60↔90 始终绕固定圆心对称展开，布局尺寸不变，不触发窗口重排。 -->
+      <Grid x:Name="ScaleHost"
+            Width="560" Height="90"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            RenderTransformOrigin="50%,50%">
       <Grid.RenderTransform>
         <ScaleTransform ScaleX="1" ScaleY="1"/>
       </Grid.RenderTransform>
@@ -262,7 +273,13 @@
       </Grid>
 
     </Grid>
+
+    <!-- ========== 插件适配器药丸：代码动态生成（一适配器一粒），显示在主药丸下方 ========== -->
+    <StackPanel x:Name="ExtraPillsHost" Orientation="Vertical" Spacing="10"/>
+
+      </StackPanel>
 	    </Grid>
+    </StackPanel>
 
 	    <!-- FPS 调试计数器（仅 show-fps 参数时可见） -->
 		    <TextBlock x:Name="FpsText"

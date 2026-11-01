@@ -120,7 +120,7 @@ EndfieldCharge/
 
 ## 许可证
 
-MIT
+本项目采用 [MIT License](LICENSE) 授权。
 
 # 有关适配器
 适配器安装在主程序目录的`./adapters`下，有需要自行创建文件夹并放入插件，开发者需要的头文件在 [ec_adapter.h](.\Contract\ec_adapter.h)

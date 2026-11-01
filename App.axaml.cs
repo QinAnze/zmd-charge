@@ -66,7 +66,7 @@ public partial class App : Application
         // 构造只装内置适配器，插件在后台加载——慢插件（蓝牙/ADB 初始化）不能拖住托盘图标。
         _adapters = new AdapterManager();
         _ = _adapters.LoadPluginsAsync();
-        // 插件状态变化（事件回调 / 15 秒轮询兜底）→ 主动弹 HUD
+        // 插件状态变化（事件回调 / 3 秒轮询兜底）→ 主动弹 HUD
         _adapters.AdapterStateChanged += OnAdapterStateChanged;
 
         SetupTrayIcon();

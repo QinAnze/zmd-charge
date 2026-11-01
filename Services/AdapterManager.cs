@@ -32,7 +32,7 @@ public sealed class StaticAdapter(string id, string name, BatterySnapshot? snaps
 ///
 /// 插件状态变化的主动弹出是双通道的（内置适配器不走，它有自己的系统电源事件）：
 ///  1. 事件驱动——插件导出 ec_set_change_callback 即可主动上报（即时弹出）；
-///  2. 轮询兜底——每 15 秒后台读一次插件，充电/外接状态翻转同样触发，不依赖插件配合。
+///  2. 轮询兜底——每 3 秒后台读一次插件，充电/外接状态翻转同样触发，不依赖插件配合。
 /// </summary>
 public sealed class AdapterManager
 {
@@ -40,7 +40,7 @@ public sealed class AdapterManager
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromMilliseconds(800);
 
     /// <summary>插件轮询间隔（秒）。</summary>
-    private const int PollIntervalSeconds = 15;
+    private const int PollIntervalSeconds = 3;
 
     /// <summary>同一适配器两次"状态变化弹出"的最小间隔（防抖，防止状态抖动刷屏）。</summary>
     private static readonly TimeSpan ChangeCooldown = TimeSpan.FromSeconds(5);

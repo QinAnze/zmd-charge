@@ -8,7 +8,7 @@
  *   ec_get_snapshot           必需：填充快照结构体，返回 0 = 成功，非 0 = 失败/暂无数据
  *   ec_adapter_id             可选：稳定唯一 ID（UTF-8），缺省用 DLL 文件名
  *   ec_adapter_name           可选：HUD 药丸上的显示名（UTF-8），缺省用 DLL 文件名
- *   ec_set_change_callback    可选：注册状态变化回调（变化即时弹 HUD；不注册则靠 15 秒轮询兜底）
+ *   ec_set_change_callback    可选：注册状态变化回调（变化即时弹 HUD；不注册则靠 3 秒轮询兜底）
  *
  * 字符串指针归插件所有，主程序不释放；插件只需保证指针在下一次调用前一直有效
  * （推荐静态缓冲区 / 字符串字面量）。
@@ -104,7 +104,7 @@ typedef void (*ec_change_fn)(void* user);
  *   - 不要在回调内再调用任何 ec_* 函数（有死锁风险）；
  *   - 尽快返回，不要做耗时工作；
  *   - 只在状态真正翻转时调用（插拔电、开始/停止充电），电量百分比变化不要调；
- *   - 不调用也不会丢事件：主程序另有 15 秒轮询兜底，回调只是让弹出更即时。 */
+ *   - 不调用也不会丢事件：主程序另有 3 秒轮询兜底，回调只是让弹出更即时。 */
 EC_EXPORT void ec_set_change_callback(ec_change_fn on_change, void* user);
 
 #endif /* EC_ADAPTER_H */

@@ -29,30 +29,52 @@ public sealed class StaticAdapter(string id, string name, BatterySnapshot? snaps
 /// 插件是 C 语言风格 ABI 的原生 DLL（导出 ec_* C 函数；C/C++/Rust/Go/Zig 等
 /// 语言都能写，契约见 Contract/ec_adapter.h），放在主程序目录的 adapters\ 下，
 /// 重启后生效。单个插件加载或读取失败只记日志，不影响其余适配器。
+///
+/// 插件状态变化的主动弹出是双通道的（内置适配器不走，它有自己的系统电源事件）：
+///  1. 事件驱动——插件导出 ec_set_change_callback 即可主动上报（即时弹出）；
+///  2. 轮询兜底——每 15 秒后台读一次插件，充电/外接状态翻转同样触发，不依赖插件配合。
 /// </summary>
 public sealed class AdapterManager
 {
     /// <summary>单次读取超时：插件可能阻塞（蓝牙 / ADB 等慢源），超时即放弃本次、回退上次成功值，不拖累 HUD。</summary>
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromMilliseconds(800);
 
+    /// <summary>插件轮询间隔（秒）。</summary>
+    private const int PollIntervalSeconds = 15;
+
+    /// <summary>同一适配器两次"状态变化弹出"的最小间隔（防抖，防止状态抖动刷屏）。</summary>
+    private static readonly TimeSpan ChangeCooldown = TimeSpan.FromSeconds(5);
+
     private readonly List<IPowerAdapter> _adapters = [];
 
-    /// <summary>插件在后台线程加载，与 HUD 读取并发；两处都经此锁串行化对 _adapters 的访问。</summary>
+    /// <summary>插件在后台线程加载，与 HUD 读取并发；对 _adapters / 轮询基线 / 防抖表的访问都经此锁串行化。</summary>
     private readonly object _loadLock = new();
 
     /// <summary>每个适配器最近一次成功读取的快照（按 Id 索引），超时时回退显示。</summary>
     private readonly ConcurrentDictionary<string, BatterySnapshot?> _lastGood = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>上次轮询到的插件状态基线。</summary>
+    private readonly Dictionary<string, (bool AcOnline, bool Charging)> _lastPollState = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>各适配器最近一次触发弹出的时间（UTC），用于防抖。</summary>
+    private readonly Dictionary<string, DateTime> _lastRaisedAt = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<IPowerAdapter> Adapters
     {
         get { lock (_loadLock) return [.. _adapters]; }
     }
 
+    /// <summary>插件适配器状态变化（事件回调或轮询发现）时触发；可能在任意线程。</summary>
+    public event Action<IPowerAdapter>? AdapterStateChanged;
+
     public AdapterManager()
     {
         // 内置适配器固定第一位：主药丸（完整三态动画 + 插拔电事件）始终展示它。
         // 只装内置的，插件留给 LoadPluginsAsync 后台加载——慢插件不能拖住托盘出现。
         _adapters.Add(new BuiltInBatteryAdapter());
+
+        // 轮询兜底通道：插件不注册回调也能靠这个发现状态变化
+        _ = Task.Run(PollLoopAsync);
     }
 
     /// <summary>后台加载 adapters\ 目录下的插件 DLL。立即返回，加载完成后插件药丸自动出现。</summary>
@@ -132,6 +154,96 @@ public sealed class AdapterManager
         }
     }
 
+    // ---------------- 状态变化：事件 + 轮询双通道 ----------------
+
+    /// <summary>插件通过 ec_set_change_callback 主动上报（可能来自插件的任意线程）。</summary>
+    private void OnPluginNotified(NativeAdapter adapter)
+    {
+        RaiseChanged(adapter);
+
+        // 立即刷新该插件的轮询基线，避免下一轮轮询把同一次变化再弹一遍
+        _ = Task.Run(async () =>
+        {
+            var reading = await ReadSafeAsync(adapter);
+            if (reading.Snapshot is { HasBattery: true })
+            {
+                lock (_loadLock)
+                    _lastPollState[adapter.Id] = (reading.Snapshot.AcOnline, reading.Snapshot.Charging);
+            }
+        });
+    }
+
+    private async Task PollLoopAsync()
+    {
+        using var timer = new System.Threading.PeriodicTimer(TimeSpan.FromSeconds(PollIntervalSeconds));
+        while (await timer.WaitForNextTickAsync())
+        {
+            try
+            {
+                await PollOnceAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"适配器轮询失败：{ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>读一遍插件适配器（内置的不算，它有自己的系统电源事件），对比上轮的充电/外接状态，翻转即触发；百分比变化不触发，避免刷屏。</summary>
+    private async Task PollOnceAsync()
+    {
+        IPowerAdapter[] adapters;
+        lock (_loadLock)
+            adapters = [.. _adapters];
+
+        var plugins = adapters
+            .Where(a => !string.Equals(a.Id, BuiltInBatteryAdapter.AdapterId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (plugins.Count == 0)
+            return;
+
+        var readings = await Task.WhenAll(plugins.Select(ReadSafeAsync));
+        var flips = new List<IPowerAdapter>();
+
+        lock (_loadLock)
+        {
+            foreach (var r in readings)
+            {
+                // 无数据/读取失败不参与比较，也不清旧状态（设备短暂休眠不应误报"变化"）
+                if (r.Snapshot is not { HasBattery: true })
+                    continue;
+
+                var state = (r.Snapshot.AcOnline, r.Snapshot.Charging);
+                if (_lastPollState.TryGetValue(r.Adapter.Id, out var prev) && prev != state)
+                    flips.Add(r.Adapter);
+                _lastPollState[r.Adapter.Id] = state;
+            }
+        }
+
+        foreach (var adapter in flips)
+            RaiseChanged(adapter);
+    }
+
+    private void RaiseChanged(IPowerAdapter adapter)
+    {
+        var now = DateTime.UtcNow;
+        lock (_loadLock)
+        {
+            if (_lastRaisedAt.TryGetValue(adapter.Id, out var t) && now - t < ChangeCooldown)
+                return;
+            _lastRaisedAt[adapter.Id] = now;
+        }
+
+        try
+        {
+            AdapterStateChanged?.Invoke(adapter);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"适配器 {adapter.Id} 状态变化通知处理失败：{ex.Message}");
+        }
+    }
+
     // ---------------- 插件加载 ----------------
 
     private void LoadPlugins()
@@ -156,6 +268,8 @@ public sealed class AdapterManager
                     continue;
                 }
 
+                // 事件驱动通道：插件导出了回调注册接口，NativeAdapter 已在加载时接上
+                adapter.StateChanged += () => OnPluginNotified(adapter);
                 lock (_loadLock)
                     _adapters.Add(adapter);
                 Logger.Info($"已加载原生适配器插件：{adapter.Id}（{Path.GetFileName(dll)}）");

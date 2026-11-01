@@ -13,6 +13,14 @@ internal delegate IntPtr EcAdapterString();
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal delegate int EcGetSnapshotNative(ref EcSnapshotNative snapshot);
 
+/// <summary>插件状态变化回调签名（插件在任意线程调用，见 ec_set_change_callback）。</summary>
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void EcChangeCallback(IntPtr user);
+
+/// <summary>ec_set_change_callback(on_change, user) 的签名。</summary>
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal delegate void EcSetChangeCallback(IntPtr onChange, IntPtr user);
+
 /// <summary>
 /// ec_snapshot 的 C# 侧镜像：字段顺序/类型必须与 Contract/ec_adapter.h 完全一致
 /// （自然对齐，x64 下 Marshal.SizeOf == 64）。
@@ -46,6 +54,15 @@ internal sealed class NativeAdapter : IPowerAdapter
     private readonly string _dllName;
     private readonly EcAdapterString? _getName;
 
+    /// <summary>插件主动上报状态变化时触发（来自插件的任意线程，订阅方自行切线程）。</summary>
+    public event Action? StateChanged;
+
+    // 原生回调 thunk：委托实例必须被强引用，否则其函数指针会随 GC 失效
+    private readonly EcChangeCallback _changeCallback;
+
+    // 传给插件的 user 指针（指回本对象；回调定位靠 per-adapter thunk，句柄兼作调试锚点，随进程存活）
+    private readonly GCHandle _selfHandle;
+
     public string Id { get; }
 
     public string Name => ReadString(_getName) ?? _dllName;
@@ -56,6 +73,8 @@ internal sealed class NativeAdapter : IPowerAdapter
         _getName = getName;
         _getSnapshot = getSnapshot;
         Id = id;
+        _changeCallback = _ => StateChanged?.Invoke();
+        _selfHandle = GCHandle.Alloc(this);
     }
 
     /// <summary>
@@ -88,6 +107,16 @@ internal sealed class NativeAdapter : IPowerAdapter
 
         var id = ReadString(getId) ?? dllName;
         adapter = new NativeAdapter(dllName, id, getName, getSnapshot);
+
+        // 事件驱动通道：插件导出了回调注册接口就接上（轮询兜底在 AdapterManager）
+        if (NativeLibrary.TryGetExport(library, "ec_set_change_callback", out var setCbAddr))
+        {
+            var setCallback = Marshal.GetDelegateForFunctionPointer<EcSetChangeCallback>(setCbAddr);
+            setCallback(
+                Marshal.GetFunctionPointerForDelegate(adapter._changeCallback),
+                GCHandle.ToIntPtr(adapter._selfHandle));
+        }
+
         return true;
     }
 

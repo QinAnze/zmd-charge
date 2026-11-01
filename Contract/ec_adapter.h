@@ -5,9 +5,10 @@
  * 重启主程序后自动加载。一个 DLL 就是一个适配器。
  *
  * 导出函数（全部 extern "C" + cdecl，函数名不可修饰）：
- *   ec_get_snapshot    必需：填充快照结构体，返回 0 = 成功，非 0 = 失败/暂无数据
- *   ec_adapter_id      可选：稳定唯一 ID（UTF-8），缺省用 DLL 文件名
- *   ec_adapter_name    可选：HUD 药丸上的显示名（UTF-8），缺省用 DLL 文件名
+ *   ec_get_snapshot           必需：填充快照结构体，返回 0 = 成功，非 0 = 失败/暂无数据
+ *   ec_adapter_id             可选：稳定唯一 ID（UTF-8），缺省用 DLL 文件名
+ *   ec_adapter_name           可选：HUD 药丸上的显示名（UTF-8），缺省用 DLL 文件名
+ *   ec_set_change_callback    可选：注册状态变化回调（变化即时弹 HUD；不注册则靠 15 秒轮询兜底）
  *
  * 字符串指针归插件所有，主程序不释放；插件只需保证指针在下一次调用前一直有效
  * （推荐静态缓冲区 / 字符串字面量）。
@@ -90,5 +91,20 @@ EC_EXPORT const char* ec_adapter_name(void);
 
 /* 必需：读取一次快照。返回 0 = 成功；非 0 = 失败/暂无数据（主程序忽略本次读数）。 */
 EC_EXPORT int32_t ec_get_snapshot(struct ec_snapshot* out);
+
+/* ================= 状态变化主动通知（可选，事件驱动） ================= */
+
+/* 主程序注册进来的回调：user 为注册时传入的不透明指针，原样传回即可。 */
+typedef void (*ec_change_fn)(void* user);
+
+/* 可选：注册状态变化回调。插件应在"充电状态 / 外接电源状态改变"时调用 on_change(user)。
+ *
+ * 约定：
+ *   - 回调可能来自任意线程，插件自行保证调用安全；
+ *   - 不要在回调内再调用任何 ec_* 函数（有死锁风险）；
+ *   - 尽快返回，不要做耗时工作；
+ *   - 只在状态真正翻转时调用（插拔电、开始/停止充电），电量百分比变化不要调；
+ *   - 不调用也不会丢事件：主程序另有 15 秒轮询兜底，回调只是让弹出更即时。 */
+EC_EXPORT void ec_set_change_callback(ec_change_fn on_change, void* user);
 
 #endif /* EC_ADAPTER_H */

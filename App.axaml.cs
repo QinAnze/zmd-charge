@@ -24,6 +24,7 @@ public partial class App : Application
     private AppSettings _settings = new();
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private bool _lastLowBatteryNotified;
+    private DateTime _lastAdapterPopupUtc;
     private HotkeyService? _hotkeys;
     private AdapterManager? _adapters;
 
@@ -65,6 +66,8 @@ public partial class App : Application
         // 构造只装内置适配器，插件在后台加载——慢插件（蓝牙/ADB 初始化）不能拖住托盘图标。
         _adapters = new AdapterManager();
         _ = _adapters.LoadPluginsAsync();
+        // 插件状态变化（事件回调 / 15 秒轮询兜底）→ 主动弹 HUD
+        _adapters.AdapterStateChanged += OnAdapterStateChanged;
 
         SetupTrayIcon();
         StartPowerWatching();
@@ -291,6 +294,24 @@ public partial class App : Application
         // 检查提醒条件（低电量 / 充满提醒只看本机电池）
         if (checkAlerts && snapshot is not null)
             CheckAlerts(snapshot);
+    }
+
+    /// <summary>插件适配器状态变化（充电/外接翻转，事件回调或轮询发现）→ 弹 HUD 展示全部药丸。</summary>
+    private void OnAdapterStateChanged(IPowerAdapter adapter)
+    {
+        // 事件可能来自插件的任意线程，统一转回 UI 线程；单适配器防抖已在 AdapterManager（5 秒）
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_hud is null || _adapters is null)
+                return;
+
+            // 多个插件同时变化时合并成一次弹出，避免动画连续重播抖动
+            if (DateTime.UtcNow - _lastAdapterPopupUtc < TimeSpan.FromSeconds(1.5))
+                return;
+            _lastAdapterPopupUtc = DateTime.UtcNow;
+
+            _ = TriggerHudAsync(checkAlerts: false, replayIntro: true);
+        });
     }
 
     /// <summary>检查并触发低电量 / 充满提醒。</summary>

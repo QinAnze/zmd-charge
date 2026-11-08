@@ -434,23 +434,18 @@ public partial class HudWindow : Window
         double fraction = Math.Clamp(content.RingPercent / 100d, 0d, 1d);
         BadgeArc.Data = BuildRingGeometry(fraction, RingDiameter, RingThickness);
 
-        // 配色：告警时才变红，且整组一起换（环 + 内部图形 + 电极）
+        // 配色：告警时才变红，且整组一起换（环 + 内部图形）
         var color = content.RingDanger ? BadgeColorDanger : BadgeColorNormal;
         var brush = new SolidColorBrush(color);
 
         BadgeArc.Stroke = brush;
-        LaptopScreen.BorderBrush = brush;
-        LaptopBase.Background = brush;
-        BadgeElectrode.Background = brush;
-        ChipBody.BorderBrush = brush;
-        ChipDie.Background = brush;
-        ChipPins.Foreground = brush;
+        BadgeLaptopIcon.Foreground = brush;
+        BadgeChipIcon.Foreground = brush;
 
-        // 内部图形：电量模式用笔记本，功耗模式用芯片
+        // 内部图形：电量模式用笔记本，功耗模式用开发板
         bool power = content.Mode == HudMode.PowerDraw;
         BadgeLaptop.IsVisible = !power;
         BadgeChip.IsVisible = power;
-        BadgeElectrode.IsVisible = !power;   // 电极只属于笔记本图形
     }
 
     /// <summary>无电池数据时的占位内容（读不到任何信息时用）。</summary>

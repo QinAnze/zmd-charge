@@ -141,7 +141,7 @@
         </Grid>
 
         <!-- 方形态：状态 C / 性能面板（18×18 圆角方块在 32×32 容器内居中；
-             面板打开时闪电换成性能芯片图标） -->
+             面板打开时闪电换成速度表图标） -->
         <Grid x:Name="SquareForm" Opacity="0">
           <Border Width="18" Height="18"
                   CornerRadius="4.5"
@@ -155,7 +155,7 @@
                         Foreground="#FF141313"/>
               <PathIcon x:Name="SquarePerfIcon"
                         Width="12" Height="12"
-                        Data="{DynamicResource Geo.PerfBars}"
+                        Data="{DynamicResource Geo.Speedometer}"
                         Foreground="#FF141313"
                         IsVisible="False"/>
             </Panel>
@@ -250,7 +250,7 @@
              外圈：进度圆弧（弧长按百分比在代码里生成，12 点方向起顺时针）
                    笔记本 = 电量百分比；台式机 = 设备负载（CPU+内存+GPU 加权）
              颜色：正常黄绿 #C6CA4C，告警红 #FF4D4F（低电量 / 负载 ≥90%）
-             内部图形：笔记本模式 = 电脑；功耗模式 = 芯片 -->
+             内部图形：电量模式 = 笔记本；功耗模式 = 开发板 -->
         <Grid x:Name="Badge" Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
           <Ellipse Width="46" Height="46" Fill="#FF262425"/>
 
@@ -261,41 +261,24 @@
                 Stroke="#FFC6CA4C" StrokeThickness="4.5"
                 StrokeLineCap="Round"/>
 
-          <!-- 笔记本电脑图形：屏幕（描边矩形）+ 底座（填充条） -->
-          <Grid x:Name="BadgeLaptop" Width="24" Height="17" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <Border x:Name="LaptopScreen"
-                    Width="17" Height="11.5" CornerRadius="1.5"
-                    BorderBrush="#FFC6CA4C" BorderThickness="2"
-                    VerticalAlignment="Top" HorizontalAlignment="Center"/>
-            <Border x:Name="LaptopBase"
-                    Width="24" Height="3" CornerRadius="1.5"
-                    Background="#FFC6CA4C"
-                    VerticalAlignment="Bottom" HorizontalAlignment="Center"/>
-          </Grid>
-
-          <!-- 芯片图形（功耗模式）：封装体描边 + 内芯填充 + 四根引脚 -->
-          <Grid x:Name="BadgeChip" Width="24" Height="24"
-                VerticalAlignment="Center" HorizontalAlignment="Center"
-                IsVisible="False">
-            <Border x:Name="ChipBody"
-                    Width="14" Height="14" CornerRadius="2"
-                    BorderBrush="#FFC6CA4C" BorderThickness="2"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <Border x:Name="ChipDie"
-                    Width="5" Height="5" CornerRadius="1"
-                    Background="#FFC6CA4C"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <PathIcon x:Name="ChipPins"
+          <!-- 笔记本：Material Symbols / laptop_mac（Apache-2.0） -->
+          <Grid x:Name="BadgeLaptop" Width="24" Height="24"
+                VerticalAlignment="Center" HorizontalAlignment="Center">
+            <PathIcon x:Name="BadgeLaptopIcon"
                       Width="24" Height="24"
-                      Data="{DynamicResource Geo.ChipPins}"
+                      Data="{DynamicResource Geo.LaptopMac}"
                       Foreground="#FFC6CA4C"/>
           </Grid>
 
-          <!-- 电池电极：只属于笔记本图形，功耗模式隐藏 -->
-          <Border x:Name="BadgeElectrode" Width="9" Height="3" CornerRadius="1,1,0,0"
-                  Background="#FFC6CA4C"
-                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                  Margin="0,-14,0,0"/>
+          <!-- 开发板：功耗模式，Material Symbols / developer_board（Apache-2.0） -->
+          <Grid x:Name="BadgeChip" Width="24" Height="24"
+                VerticalAlignment="Center" HorizontalAlignment="Center"
+                IsVisible="False">
+            <PathIcon x:Name="BadgeChipIcon"
+                      Width="24" Height="24"
+                      Data="{DynamicResource Geo.DeveloperBoard}"
+                      Foreground="#FFC6CA4C"/>
+          </Grid>
         </Grid>
       </Grid>
 

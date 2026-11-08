@@ -67,6 +67,10 @@ public partial class App : Application
         // 设备类型（来自 dev）：台式机走功耗模式，没有电池
         _isDesktop = DeviceInfo.IsDesktop();
 
+        // 调试用：强制按台式机渲染（在笔记本上检查功耗模式），配合 --demo 使用
+        if (HasCommandLineArg("--force-desktop"))
+            _isDesktop = true;
+
         // 系统负载采样（来自 dev）：性能面板六项指标 / 功耗模式的数据源
         _load = new SystemLoadService();
 
@@ -145,7 +149,9 @@ public partial class App : Application
             RemainingWh: 62.4, FullWh: 90.0,
             Percent: 69, AcOnline: true, Charging: true);
 
-        await _hud.ShowAndPlayAsync([SampleReading(sample)], acOnline: true);
+        // 强制台式机时传空快照，让 HUD 走功耗模式（整机瓦数 + 开发板徽章）
+        await _hud.ShowAndPlayAsync(
+            [SampleReading(_isDesktop ? null : sample)], acOnline: true);
     }
 
     /// <summary>--preview-unplug：未插电（电池模式）三态动画，样本数据。</summary>

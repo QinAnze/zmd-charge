@@ -24,8 +24,10 @@ public static class Localization
     }
 
     // ---- HUD ----
-    public static string TagLine => IsChinese ? "/// 超充模式" : "/// SUPER CHARGE MODE";
-    public static string TitleMode => IsChinese ? "超充模式" : "Super Charge Mode";
+    public static string TagLine => IsChinese ? "/// 充电模式" : "/// CHARGE MODE";
+    public static string TitleMode => IsChinese ? "充电模式" : "Charge Mode";
+    public static string TagLinePowerDraw => IsChinese ? "/// 功耗模式" : "/// POWER DRAW";
+    public static string TitlePowerDraw => IsChinese ? "功耗模式" : "Power Draw Mode";
     public static string TagLineSaver => IsChinese ? "/// 省电模式" : "/// POWER SAVING MODE";
     public static string TitleSaver => IsChinese ? "省电模式" : "Power Saving Mode";
     public static string TagLineBattery => IsChinese ? "/// 电池模式" : "/// BATTERY MODE";

@@ -50,6 +50,14 @@ public partial class HudWindow : Window
     private DateTime _fpsLastMeasure = DateTime.UtcNow;
     private bool _fpsEnabled;
 
+    // 性能面板（来自 dev）：点击胶囊在圆胶囊 ⇄ 圆角矩形之间形变
+    private static readonly TimeSpan PanelRefreshInterval = TimeSpan.FromMilliseconds(500);
+    private Func<SystemLoadSnapshot?>? _perfProvider;
+    private DispatcherTimer? _panelTimer;
+    private bool _panelOpen;
+    private bool _panelBusy;
+    private readonly bool _isDesktop;
+
     /// <summary>当前在播哪套动画（None = 没在播）。播放中再次唤起靠它判断能不能"续住"。</summary>
     private PlayKind _play = PlayKind.None;
 
@@ -66,15 +74,22 @@ public partial class HudWindow : Window
         Simple,
     }
 
-    public HudWindow()
+    /// <summary>无参构造：XAML 运行时加载器需要（AVLN3001）。</summary>
+    public HudWindow() : this(null, false)
     {
+    }
+
+    public HudWindow(Func<SystemLoadSnapshot?>? perfProvider, bool isDesktop = false)
+    {
+        _perfProvider = perfProvider;
+        _isDesktop = isDesktop;
         InitializeComponent();
 
         TagLineText.Text = Localization.TagLine;
         TitleText.Text = Localization.TitleMode;
 
         Cursor = new Cursor(StandardCursorType.Hand);
-        PointerPressed += (_, _) => _ = DismissAsync();
+        PointerPressed += (_, _) => TogglePanel();
 
         _fpsEnabled = Array.Exists(Environment.GetCommandLineArgs(), a => a == "--show-fps");
         if (_fpsEnabled)
@@ -104,6 +119,7 @@ public partial class HudWindow : Window
 
     public async Task ShowSimpleAsync(IReadOnlyList<AdapterReading> readings, AnimationOptions? options = null)
     {
+        ResetPanel();
         ApplyReadings(readings);
 
         var o = options ?? _animOptions;
@@ -153,15 +169,23 @@ public partial class HudWindow : Window
         AnimationOptions? options = null,
         bool replayIntro = true)
     {
+        ResetPanel();
         ApplyReadings(readings);
 
-        // 文案主题：充电 = 超充模式；电池 = 电池模式；省电 = 省电模式
+        // 文案主题：充电 = 充电模式；电池 = 电池模式；省电 = 省电模式；台式机 = 功耗模式
         (TagLineText.Text, TitleText.Text) = mode switch
         {
             HudPlayMode.Battery => (Localization.TagLineBattery, Localization.TitleBattery),
             HudPlayMode.PowerSaver => (Localization.TagLineSaver, Localization.TitleSaver),
+            _ when _isDesktop => (Localization.TagLinePowerDraw, Localization.TitlePowerDraw),
             _ => (Localization.TagLine, Localization.TitleMode),
         };
+
+        // 省电模式用叶子，其余模式用闪电（圆形态 / 方形态一致）
+        Geometry? modeIcon = ResolveGeometry(
+            mode == HudPlayMode.PowerSaver ? "Geo.Leaf" : "Geo.Bolt");
+        CircleBoltIcon.Data = modeIcon;
+        SquareBoltIcon.Data = modeIcon;
 
         var o = options ?? _animOptions;
 
@@ -319,14 +343,20 @@ public partial class HudWindow : Window
     private void ApplyBattery(BatterySnapshot? snap)
     {
         double fraction = 0d;
+        double loadPercent = 0d;
+        bool noBattery = snap is null || !snap.HasBattery;
 
-        if (snap is null || !snap.HasBattery)
+        if (noBattery)
         {
-            WhValueText.Text = "--";
-            WhMaxText.Text = string.Empty;
-            PercentText.Text = "--";
+            // 台式机 / 读不到电池：功耗模式（来自 dev），显示整机瓦数与设备负载
+            var load = _perfProvider?.Invoke();
+            WhValueText.Text = load?.Watts is { } w ? w.ToString("F0") : "--";
+            WhMaxText.Text = "W";
+            loadPercent = load?.LoadPercent ?? 0d;
+            PercentText.Text = load is null ? "--" : loadPercent.ToString("F0");
+            fraction = Math.Clamp(loadPercent / 100d, 0d, 1d);
         }
-        else
+        else if (snap is not null)
         {
             WhValueText.Text = (snap.RemainingWh * 1000).ToString("F0");
             WhMaxText.Text = $"/{snap.FullWh * 1000:F0}";
@@ -336,13 +366,17 @@ public partial class HudWindow : Window
 
         BadgeArc.Data = BuildRingGeometry(fraction, RingDiameter, RingThickness);
 
-        var badgeColor = snap is not null && snap.HasBattery && snap.Percent < 20
+        var badgeColor = (snap is not null && snap.HasBattery && snap.Percent < 20)
+                         || (noBattery && loadPercent >= 90d)
             ? BadgeColorLow
             : BadgeColorNormal;
         BadgeArc.Stroke = new SolidColorBrush(badgeColor);
-        LaptopScreen.BorderBrush = new SolidColorBrush(badgeColor);
-        LaptopBase.Background = new SolidColorBrush(badgeColor);
-        BadgeElectrode.Background = new SolidColorBrush(badgeColor);
+        BadgeLaptopIcon.Foreground = new SolidColorBrush(badgeColor);
+        BadgeChipIcon.Foreground = new SolidColorBrush(badgeColor);
+
+        // 台式机 / 读不到电池：徽章显示开发板
+        BadgeLaptop.IsVisible = !noBattery;
+        BadgeChip.IsVisible = noBattery;
     }
 
     // ---------------- 插件适配器药丸 ----------------
@@ -480,7 +514,7 @@ public partial class HudWindow : Window
         {
             Width = 12,
             Height = 12,
-            Data = ResolveGeometry("Geo.Plug"),
+            Data = ResolveGeometry("Geo.Cable"),
             Foreground = accent,
         });
         Grid.SetColumn(badge, 7);
@@ -577,6 +611,7 @@ public partial class HudWindow : Window
 
     private void ResetToInitial()
     {
+        ResetPanel();
         Root.Opacity = 1;
 
         ScaleHost.RenderTransform = new ScaleTransform(1d, 1d);
@@ -734,4 +769,117 @@ public partial class HudWindow : Window
             PositionTopCenter();
         }, DispatcherPriority.Loaded);
     }
+    // ---------------- 性能面板：点击胶囊 ⇄ 圆角矩形形变（来自 dev） ----------------
+
+    private void TogglePanel()
+    {
+        if (_panelBusy)
+            return;
+
+        if (_panelOpen)
+            _ = ClosePanelAsync();
+        else
+            _ = OpenPanelAsync();
+    }
+
+    private async Task OpenPanelAsync()
+    {
+        _panelBusy = true;
+        _panelOpen = true;
+
+        _cts?.Cancel();
+        ApplyCState();
+
+        SquareBoltIcon.IsVisible = false;
+        SquarePerfIcon.IsVisible = true;
+        PerfPanel.IsVisible = true;
+        UpdatePerfPanel();
+        StartPanelTimer();
+
+        try
+        {
+            await Task.WhenAll(
+                HudAnimations.PanelExpand().RunAsync(Pill),
+                HudAnimations.PanelFadeIn().RunAsync(PerfPanel),
+                HudAnimations.NumFadeOut().RunAsync(NumHost));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        NumHost.Opacity = 0;
+        _panelBusy = false;
+    }
+
+    private async Task ClosePanelAsync()
+    {
+        _panelBusy = true;
+        _panelOpen = false;
+        StopPanelTimer();
+
+        SquareBoltIcon.IsVisible = true;
+        SquarePerfIcon.IsVisible = false;
+
+        try
+        {
+            await Task.WhenAll(
+                HudAnimations.PanelContract().RunAsync(Pill),
+                HudAnimations.PanelFadeOut().RunAsync(PerfPanel),
+                HudAnimations.NumFadeIn().RunAsync(NumHost));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        PerfPanel.IsVisible = false;
+        NumHost.Opacity = 1;
+        _panelBusy = false;
+    }
+
+    private void ResetPanel()
+    {
+        _panelOpen = false;
+        _panelBusy = false;
+        StopPanelTimer();
+        PerfPanel.IsVisible = false;
+        PerfPanel.Opacity = 1;
+        SquareBoltIcon.IsVisible = true;
+        SquarePerfIcon.IsVisible = false;
+        NumHost.Opacity = 1;
+    }
+
+    private void StartPanelTimer()
+    {
+        StopPanelTimer();
+        _panelTimer = new DispatcherTimer(
+            PanelRefreshInterval, DispatcherPriority.Normal, (_, _) => UpdatePerfPanel());
+        _panelTimer.Start();
+    }
+
+    private void StopPanelTimer()
+    {
+        _panelTimer?.Stop();
+        _panelTimer = null;
+    }
+
+    private void UpdatePerfPanel()
+    {
+        SystemLoadSnapshot? s = _perfProvider?.Invoke();
+        if (s is null)
+            return;
+
+        PerfCpu.Text = $"{s.CpuPercent:F0} %";
+        PerfGpu.Text = s.GpuPercent is { } gpu ? $"{gpu:F0} %" : "--";
+        PerfMem.Text = $"{s.MemoryPercent:F0} %";
+        PerfDisk.Text = s.DiskMBs is { } mbs ? FormatDiskSpeed(mbs) : "--";
+        PerfUp.Text = FormatSpeed(s.NetUpKBs);
+        PerfDown.Text = FormatSpeed(s.NetDownKBs);
+    }
+
+    private static string FormatSpeed(double kbs) =>
+        kbs >= 1024d ? $"{kbs / 1024d:F1} MB/s" : $"{kbs:F0} KB/s";
+
+    private static string FormatDiskSpeed(double mbs) =>
+        mbs >= 1024d ? $"{mbs / 1024d:F2} GB/s" : $"{mbs:F1} MB/s";
+
 }

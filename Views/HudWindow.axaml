@@ -143,21 +143,30 @@
         <!-- 圆形形态：状态 A 与 B（白圆 32 小一圈，平行四边形 logo 18 占大头） -->
         <Grid x:Name="CircleForm">
           <Ellipse Width="32" Height="32" Fill="#FFE9E7E4"/>
-          <PathIcon Width="18" Height="18"
+          <PathIcon x:Name="CircleBoltIcon" Width="18" Height="18"
                     Data="{DynamicResource Geo.Bolt}"
                     Foreground="#FF141313"/>
         </Grid>
 
-        <!-- 方形态：状态 C（18×18 圆角方块，在 32×32 容器内居中，logo 12） -->
+        <!-- 方形态：状态 C / 性能面板（18×18 圆角方块在 32×32 容器内居中；
+             面板打开时闪电换成速度表图标） -->
         <Grid x:Name="SquareForm" Opacity="0">
           <Border Width="18" Height="18"
                   CornerRadius="4.5"
                   Background="#FFE9E7E4"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center">
-            <PathIcon Width="12" Height="12"
-                      Data="{DynamicResource Geo.Bolt}"
-                      Foreground="#FF141313"/>
+            <Panel>
+              <PathIcon x:Name="SquareBoltIcon"
+                        Width="12" Height="12"
+                        Data="{DynamicResource Geo.Bolt}"
+                        Foreground="#FF141313"/>
+              <PathIcon x:Name="SquarePerfIcon"
+                        Width="12" Height="12"
+                        Data="{DynamicResource Geo.Speedometer}"
+                        Foreground="#FF141313"
+                        IsVisible="False"/>
+            </Panel>
           </Border>
         </Grid>
       </Grid>
@@ -172,7 +181,7 @@
           <TranslateTransform X="0"/>
         </StackPanel.RenderTransform>
         <TextBlock x:Name="TagLineText"
-                   Text="/// SUPER CHARGE MODE"
+                   Text="/// CHARGE MODE"
                    FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
                    FontSize="9" FontWeight="Medium"
                    LetterSpacing="2"
@@ -180,7 +189,7 @@
                    Foreground="White"
                    Opacity="0.40"/>
         <TextBlock x:Name="TitleText"
-                   Text="超充模式"
+                   Text="充电模式"
                    FontFamily="{DynamicResource Hud.FontFamily}"
                    FontSize="26" FontWeight="Bold"
                    LetterSpacing="2"
@@ -211,11 +220,13 @@
 
         <StackPanel Grid.Column="3" Orientation="Horizontal"
                     VerticalAlignment="Center" Spacing="2">
+          <!-- 主数值：笔记本是剩余 mWh，台式机是估算功耗 W -->
           <TextBlock x:Name="WhValueText"
                      Text="0.0"
                      FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
                      FontSize="26" FontWeight="Medium"
                      Foreground="White"/>
+          <!-- 单位：笔记本是 /满电 mWh，台式机是 W -->
           <TextBlock x:Name="WhMaxText"
                      Text="/0.0"
                      FontFamily="{DynamicResource Hud.FontFamilyNumeric}"
@@ -238,11 +249,12 @@
                      VerticalAlignment="Center"/>
         </StackPanel>
 
-        <!-- 黄绿电池徽章：46 直径正好被 60 高胶囊包住
+        <!-- 黄绿徽章：46 直径正好被 60 高胶囊包住
              底：暗色圆盘
-             外圈：进度圆弧（弧长 = 电量百分比，12 点方向起顺时针），几何在代码里按百分比生成
-             颜色：≥20% 黄绿 #C6CA4C，<20% 变红 #FF4D4F
-             内部图形 = 笔记本电脑（屏幕描边 + 底座填充） -->
+             外圈：进度圆弧（弧长按百分比在代码里生成，12 点方向起顺时针）
+                   笔记本 = 电量百分比；台式机 = 设备负载（CPU+内存+GPU 加权）
+             颜色：正常黄绿 #C6CA4C，告警红 #FF4D4F（低电量 / 负载 ≥90%）
+             内部图形：电量模式 = 笔记本；功耗模式 = 开发板 -->
         <Grid x:Name="Badge" Grid.Column="7" Width="46" Height="46" VerticalAlignment="Center">
           <Ellipse Width="46" Height="46" Fill="#FF262425"/>
 
@@ -253,22 +265,110 @@
                 Stroke="#FFC6CA4C" StrokeThickness="4.5"
                 StrokeLineCap="Round"/>
 
-          <!-- 笔记本电脑图形：屏幕（描边矩形）+ 底座（填充条） -->
-          <Grid x:Name="BadgeLaptop" Width="24" Height="17" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <Border x:Name="LaptopScreen"
-                    Width="17" Height="11.5" CornerRadius="1.5"
-                    BorderBrush="#FFC6CA4C" BorderThickness="2"
-                    VerticalAlignment="Top" HorizontalAlignment="Center"/>
-            <Border x:Name="LaptopBase"
-                    Width="24" Height="3" CornerRadius="1.5"
-                    Background="#FFC6CA4C"
-                    VerticalAlignment="Bottom" HorizontalAlignment="Center"/>
+          <!-- 笔记本：Material Symbols / laptop_mac（Apache-2.0） -->
+          <Grid x:Name="BadgeLaptop" Width="24" Height="24"
+                VerticalAlignment="Center" HorizontalAlignment="Center">
+            <PathIcon x:Name="BadgeLaptopIcon"
+                      Width="24" Height="24"
+                      Data="{DynamicResource Geo.LaptopMac}"
+                      Foreground="#FFC6CA4C"/>
           </Grid>
 
-          <Border x:Name="BadgeElectrode" Width="9" Height="3" CornerRadius="1,1,0,0"
-                  Background="#FFC6CA4C"
-                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                  Margin="0,-14,0,0"/>
+          <!-- 开发板：功耗模式，Material Symbols / developer_board（Apache-2.0） -->
+          <Grid x:Name="BadgeChip" Width="24" Height="24"
+                VerticalAlignment="Center" HorizontalAlignment="Center"
+                IsVisible="False">
+            <PathIcon x:Name="BadgeChipIcon"
+                      Width="24" Height="24"
+                      Data="{DynamicResource Geo.DeveloperBoard}"
+                      Foreground="#FFC6CA4C"/>
+          </Grid>
+        </Grid>
+      </Grid>
+
+      <!-- ========== 性能面板：点击圆胶囊形变展开 ==========
+           自身透明，背景就是形变中的胶囊（高 60→90、圆角 30→18），
+           所以背景与圆角永远和圆角矩形一致。六项指标由代码刷新。 -->
+      <Grid x:Name="PerfPanel"
+            Width="560" Height="90"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            IsVisible="False" IsHitTestVisible="False"
+            Opacity="0">
+        <Grid Margin="40,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+
+          <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfCpu" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="CPU"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfGpu" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="GPU"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfMem" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="内存"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfDisk" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="硬盘"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfUp" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="上传"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
+
+          <StackPanel Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock x:Name="PerfDown" Text="--"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="17" FontWeight="SemiBold"
+                       Foreground="White" HorizontalAlignment="Center"/>
+            <TextBlock Text="下载"
+                       FontFamily="{DynamicResource Hud.FontFamily}"
+                       FontSize="10" FontWeight="Medium" LetterSpacing="1"
+                       Foreground="White" Opacity="0.40" HorizontalAlignment="Center"/>
+          </StackPanel>
         </Grid>
       </Grid>
 

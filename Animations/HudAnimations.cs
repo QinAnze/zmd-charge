@@ -44,7 +44,7 @@ public sealed record AnimationOptions
 ///   0.09-0.12  A→B：高度 60→90 + CornerRadius 30→18（圆胶囊变高矩形）
 ///   0.12-0.20  电标从中间平滑滑到左侧 B 位（easeInOutCubic，无过冲）；
 ///               RippleHost 用同一条曲线同步跟随，三圈波纹同时从 0 扩散
-///   0.20-0.25  「/// SUPER CHARGE MODE + 超充模式」居中淡入
+///   0.20-0.25  「/// CHARGE MODE + 充电模式」居中淡入
 ///   0.25-0.30  状态 B 短停
 ///   0.30-0.36  B→C：标题与波纹一起淡化，高度 90→60，CornerRadius 18→30，
 ///               电标从 B 位滑到贴左 C 位
@@ -270,7 +270,7 @@ internal static class HudAnimations
 
     /// <summary>
     /// 标题态：居中于胶囊。等电标滑到位（TMove）之后才淡入 0.20→0.25，
-    /// 保证"电标先滑到左边 → 再出超充模式"的先后顺序。
+    /// 保证"电标先滑到左边 → 再出充电模式"的先后顺序。
     /// </summary>
     public static Animation TitleHost(AnimationOptions o)
     {
@@ -446,6 +446,72 @@ internal static class HudAnimations
         a.Children.Add(KF(MapCueSimple(o, TSimpleClose), KS_In, Op(0), TY(0)));
         return a;
     }
+
+    // ---------------- 性能面板（点击圆胶囊 ⇄ 圆角矩形） ----------------
+    // 形变规格与三态 A→B / B→C 完全一致：横向 560 恒定，高 60↔90，圆角 30↔18，快速过渡。
+
+    public static readonly TimeSpan PanelMorph = TimeSpan.FromSeconds(0.2);
+
+    /// <summary>圆胶囊 → 圆角矩形：高 60→90、圆角 30→18。</summary>
+    public static Animation PanelExpand()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, H(PillHeightA), CR(PillRadiusA)));
+        a.Children.Add(KF(1d, KS_InOut, H(PillHeightB), CR(PillRadiusB)));
+        return a;
+    }
+
+    /// <summary>圆角矩形 → 圆胶囊：高 90→60、圆角 18→30。</summary>
+    public static Animation PanelContract()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, H(PillHeightB), CR(PillRadiusB)));
+        a.Children.Add(KF(1d, KS_InOut, H(PillHeightA), CR(PillRadiusA)));
+        return a;
+    }
+
+    /// <summary>面板内容淡入：等形变过半再出现，避免内容跟着 60 高的小胶囊挤出边界。</summary>
+    public static Animation PanelFadeIn()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(0)));
+        a.Children.Add(KF(0.4d, KS_In, Op(0)));
+        a.Children.Add(KF(1d, KS_Out, Op(1)));
+        return a;
+    }
+
+    /// <summary>面板内容淡出：全程线性渐隐，不先停留。</summary>
+    public static Animation PanelFadeOut()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(1)));
+        a.Children.Add(KF(1d, KS_Out, Op(0)));
+        return a;
+    }
+
+    /// <summary>电量内容淡出（打开面板时，渐隐让位）。</summary>
+    public static Animation NumFadeOut()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(1)));
+        a.Children.Add(KF(1d, KS_Out, Op(0)));
+        return a;
+    }
+
+    /// <summary>电量内容淡入（关闭面板时，随收缩渐显）。</summary>
+    public static Animation NumFadeIn()
+    {
+        var a = NewPanel();
+        a.Children.Add(KF(0d, null, Op(0)));
+        a.Children.Add(KF(1d, KS_Out, Op(1)));
+        return a;
+    }
+
+    private static Animation NewPanel() => new()
+    {
+        Duration = PanelMorph,
+        FillMode = FillMode.Forward,
+    };
 
     // ---------------- 构造辅助 ----------------
 

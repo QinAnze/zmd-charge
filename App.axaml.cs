@@ -28,6 +28,11 @@ public partial class App : Application
     private HotkeyService? _hotkeys;
     private AdapterManager? _adapters;
 
+    private SystemLoadService? _load;
+
+    /// <summary>是否按台式机处理（读不到电池）。决定显示功耗模式还是电量模式。</summary>
+    private bool _isDesktop;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -59,7 +64,13 @@ public partial class App : Application
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         desktop.Exit += OnDesktopExit;
 
-        _hud = new HudWindow();
+        // 设备类型（来自 dev）：台式机走功耗模式，没有电池
+        _isDesktop = DeviceInfo.IsDesktop();
+
+        // 系统负载采样（来自 dev）：性能面板六项指标 / 功耗模式的数据源
+        _load = new SystemLoadService();
+
+        _hud = new HudWindow(() => _load?.Current, _isDesktop);
         _hud.ApplySettings(_settings);
 
         // 适配器：内置电池（主药丸）+ adapters\ 目录下的插件（各自一粒药丸）。
@@ -288,7 +299,7 @@ public partial class App : Application
         var snapshot = readings.Count > 0 ? readings[0].Snapshot : null;
         bool acOnline = acRead ? acNative : snapshot?.AcOnline == true;
 
-        // 文案/波纹跟着真实电源状态走：未插电时不该再显示「超充模式」
+        // 文案/波纹跟着真实电源状态走：未插电时不该再显示「充电模式」
         var mode = acOnline ? HudPlayMode.Charge : HudPlayMode.Battery;
         await _hud.ShowAndPlayAsync(readings, acOnline, mode, replayIntro: replayIntro);
         // 检查提醒条件（低电量 / 充满提醒只看本机电池）
@@ -520,6 +531,9 @@ public partial class App : Application
         _hotkeys = null;
         _watcher?.Dispose();
         _watcher = null;
+
+        _load?.Dispose();
+        _load = null;
 
         if (_tray is not null)
         {
